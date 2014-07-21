@@ -1,5 +1,6 @@
 """Functions for analyzing whiski data"""
 import traj, trace
+import numpy as np, pandas
 
 def load_whisker_traces(whisk_file):
     """Load the traces, return as frame2segment_id2whisker_seg"""
