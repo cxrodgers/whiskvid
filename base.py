@@ -22,6 +22,16 @@ def load_whisker_positions(whisk_file, measure_file, side='left'):
     This algorithm needs some work. Not sure the best way to convert to
     an angle. See comments.
     
+    Whisker ids, compared with color in whiski GUI:
+    (This may differ with the total number of whiskers??)
+        -1  orange, one of the unidentified traces
+        0   red
+        1   yellow
+        2   green
+        3   cyan
+        4   blue
+        5   magenta
+    
     Uses `side` to disambiguate some edge cases.
     
     Returns DataFrame `angl_df` with columns:
