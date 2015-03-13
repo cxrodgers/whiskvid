@@ -136,3 +136,76 @@ def pin_angle(angle, side):
             return angle - 180
     return angle
     
+def assign_tip_and_follicle(x0, x1, y0, y1, side=None):
+    """Decide which end is the tip.
+    
+    The side of the screen that is closest to the face is used to determine
+    the follicle. For example, if the face is along the left, then the
+    left-most end is the follicle.
+    
+    We assume (0, 0) is in the upper left corner, and so "top" means that
+    the face lies near row zero.
+    
+    Returns: fol_x, tip_x, fol_y, tip_y
+        If side is None, return x0, x1, y0, y1
+    """
+    if side is None:
+        return x0, x1, y0, y1
+    elif side in ['left', 'right', 'top', 'bottom']:
+        # Is it correctly oriented, ie, 0 is fol and 1 is tip
+        is_correct = (
+            (side == 'left' and x0 < x1) or 
+            (side == 'right' and x1 < x0) or 
+            (side == 'top' and y0 < y1) or 
+            (side == 'bottom' and y1 < y0))
+        
+        # Return normal or swapped
+        if is_correct:
+            return x0, x1, y0, y1
+        else:
+            return x1, x0, y1, y0
+    else:
+        raise ValueError("unknown value for side: %s" % side)
+
+def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
+    side=None, also_calculate_length=True):
+    """Returns dataframe with both ends of every whisker
+    
+    Provide either whisk_file or frame2segment_id2whisker_seg
+    side : used to determine which end is which
+    
+    Returns a DataFrame with columns:
+        'fol_x', 'fol_y', 'frame', 'seg', 'tip_x', 'tip_y', 'length'
+    """
+    # Load traces
+    if frame2segment_id2whisker_seg is None:
+        frame2segment_id2whisker_seg = load_whisker_traces(whisk_file)
+    
+    # Get tips and follicles
+    res_l = []
+    for frame, segment_id2whisker_seg in frame2segment_id2whisker_seg.items():
+        for segment_id, whisker_seg in segment_id2whisker_seg.items():
+            # Get x and y of both ends
+            x0, x1 = whisker_seg.x[[0, -1]]
+            y0, y1 = whisker_seg.y[[0, -1]]
+            
+            # Pin
+            fol_x, tip_x, fol_y, tip_y = assign_tip_and_follicle(x0, x1, y0, y1, 
+                side=side)
+            
+            # Stores
+            res_l.append({
+                'frame': frame, 'seg': segment_id,
+                'tip_x': tip_x, 'tip_y': tip_y,
+                'fol_x': fol_x, 'fol_y': fol_y})
+
+    # DataFrame
+    resdf = pandas.DataFrame.from_records(res_l)
+
+    # length
+    if also_calculate_length:
+        resdf['length'] = np.sqrt(
+            (resdf['tip_y'] - resdf['fol_y']) ** 2 + 
+            (resdf['tip_x'] - resdf['fol_x']) ** 2)
+    
+    return resdf
