@@ -1,6 +1,7 @@
 """Functions for analyzing whiski data"""
 import traj, trace
 import numpy as np, pandas
+import scipy.ndimage
 
 def load_whisker_traces(whisk_file):
     """Load the traces, return as frame2segment_id2whisker_seg"""
@@ -229,16 +230,20 @@ def get_object_size_and_centroid(objects):
     # Get size and centroid of each
     szs, centroids = [], []
     for object_id in object_ids:
-        # Mask out this object
-        object_y, object_x = np.where(objects == object_id)
-        
         # Get its size and centroid and store
         sz = np.sum(objects == object_id)
-        centroid = np.mean(object_x), np.mean(object_y)
         szs.append(sz)
-        centroids.append(centroid)
+
+    # Get the center of mass
+    # This is the bottleneck step of the whole process
+    # center_of_mass is not really any faster than manually calculating
+    # we switch x and y for backwards compat
+    # Maybe (arr.mean(0) * arr.sum(0)).mean() to get a weighted average in y?
+    centroids2 = np.asarray(scipy.ndimage.center_of_mass(
+        objects, objects, object_ids))
+    centroids3 = centroids2[:, [1, 0]]
     
-    return np.asarray(szs), np.asarray(centroids)
+    return np.asarray(szs), centroids3
 
 def is_centroid_in_roi(centroid, roi_x, roi_y):
     """Returns True if the centroid is in the ROI.
