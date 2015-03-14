@@ -209,3 +209,68 @@ def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
             (resdf['tip_x'] - resdf['fol_x']) ** 2)
     
     return resdf
+
+
+def get_object_size_and_centroid(objects):
+    """Returns size and centroid of every object.
+    
+    objects : first result from scipy.ndimage.label
+    
+    Returns: szs, centroids
+        szs : array of object sizes, starting with the object labeled 0
+            (which is usually the background) and continuing through all
+            available objects
+        centroids : same, but for the centroids. This will be a Nx2 array.
+    """
+    # Find out which objects are contained
+    object_ids = np.unique(objects)
+    assert np.all(object_ids == np.arange(len(object_ids)))
+    
+    # Get size and centroid of each
+    szs, centroids = [], []
+    for object_id in object_ids:
+        # Mask out this object
+        object_y, object_x = np.where(objects == object_id)
+        
+        # Get its size and centroid and store
+        sz = np.sum(objects == object_id)
+        centroid = np.mean(object_x), np.mean(object_y)
+        szs.append(sz)
+        centroids.append(centroid)
+    
+    return np.asarray(szs), np.asarray(centroids)
+
+def is_centroid_in_roi(centroid, roi_x, roi_y):
+    """Returns True if the centroid is in the ROI.
+    
+    centroid : x, y
+    roi_x : x_min, x_max
+    roi_y : y_min, y_max
+    """
+    return (
+        centroid[0] >= roi_x[0] and centroid[0] < roi_x[1] and
+        centroid[1] >= roi_y[0] and centroid[1] < roi_y[1]
+        )
+
+def get_edge(object_mask):
+    """Return the left edge of the object.
+    
+    Currently, for each row, we take the left most nonzero value. We
+    return (row, col) for each such pixel. However, this doesn't work for
+    horizontal parts of the edge.
+    """
+    contour = []
+    for nrow, row in enumerate(object_mask):
+        true_cols = np.where(row)[0]
+        if len(true_cols) == 0:
+            continue
+        else:
+            contour.append((nrow, true_cols[0]))
+    return np.asarray(contour)
+
+def plot_all_objects(objects, nobjects):
+    f, axa = plt.subplots(1, nobjects)
+    for object_id in range(nobjects):
+        axa[object_id].imshow(objects == object_id)
+    plt.show()
+    
