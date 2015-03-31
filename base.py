@@ -565,3 +565,49 @@ def select_pixels(h5file, **kwargs):
         for idx in mask]
     return res
 ## End HDF5 stuff
+
+
+
+def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
+    length_thresh=75, contact_dist_thresh=10,
+    fol_range_x=(0, 70), fol_range_y=(250, 360)):
+    # Get the ends
+    resdf = whiskvid.get_whisker_ends_hdf5(h5_filename, side=side)
+
+    # Drop everything < thresh
+    resdf = resdf[resdf['length'] >= length_thresh]
+
+    # Follicle mask
+    resdf = resdf[
+        (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
+        (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
+
+    # Get the edges
+    edge_a = np.load(edge_file)
+
+    # Find the contacts
+    # For every frame, iterate through whiskers and compare to shape
+    contacts_l = []
+    for nframe, edge_frame in enumerate(edge_a):
+        if edge_frame is None:
+            continue
+        
+        frame_tips = my.pick_rows(resdf, frame=nframe)
+        
+        for idx, frame_tip in frame_tips.iterrows():
+            dists = np.sqrt(
+                (edge_frame[:, 1] - frame_tip['tip_x']) ** 2 + 
+                (edge_frame[:, 0] - frame_tip['tip_y']) ** 2)
+            closest_edge_idx = np.argmin(dists)
+            closest_dist = dists[closest_edge_idx]
+            contacts_l.append({'index': idx, 'closest_dist': closest_dist,
+                'closest_edge_idx': closest_edge_idx})
+    contacts_df = pandas.DataFrame.from_records(contacts_l)
+
+    # Join
+    tips_and_contacts = resdf.join(contacts_df.set_index('index'))
+    tips_and_contacts = tips_and_contacts[
+        tips_and_contacts.closest_dist < contact_dist_thresh]
+    if tac_filename is not None:
+        tips_and_contacts.to_pickle(tac_filename)
+    return tips_and_contacts
