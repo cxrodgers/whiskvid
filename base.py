@@ -168,6 +168,9 @@ def assign_tip_and_follicle(x0, x1, y0, y1, side=None):
     else:
         raise ValueError("unknown value for side: %s" % side)
 
+
+
+
 def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
     side=None, also_calculate_length=True):
     """Returns dataframe with both ends of every whisker
@@ -273,9 +276,177 @@ def get_edge(object_mask):
             contour.append((nrow, true_cols[0]))
     return np.asarray(contour)
 
+def get_edge2(object_mask):
+    """Return the bottom edge of the object.
+    
+    Currently, for each row, we take the left most nonzero value. We
+    return (row, col) for each such pixel. However, this doesn't work for
+    horizontal parts of the edge.
+    """
+    contour = []
+    for ncol, col in enumerate(object_mask.T):
+        true_rows = np.where(col)[0]
+        if len(true_rows) == 0:
+            continue
+        else:
+            contour.append((true_rows[-1], ncol))
+    return np.asarray(contour)
+
 def plot_all_objects(objects, nobjects):
     f, axa = plt.subplots(1, nobjects)
     for object_id in range(nobjects):
         axa[object_id].imshow(objects == object_id)
     plt.show()
+
+
+
+
+
+## Begin stuff for putting whisker data into HDF5
+class WhiskerSeg(tables.IsDescription):
+    import tables
+    time = tables.UInt32Col()
+    id = tables.UInt16Col()
+    tip_x = tables.Float32Col()
+    tip_y = tables.Float32Col()
+    fol_x = tables.Float32Col()
+    fol_y = tables.Float32Col()
+    pixlen = tables.UInt16Col()
+
+def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
+    flush_interval=100000):
+    """Load data from whisk_file and put it into an hdf5 file
     
+    The HDF5 file will have two basic components:
+        /summary : A table with the following columns:
+            time, id, fol_x, fol_y, tip_x, tip_y, pixlen
+            These are all directly taken from the whisk file
+        /pixels_x : A vlarray of the same length as summary but with the
+            entire array of x-coordinates of each segment.
+        /pixels_y : Same but for y-coordinates
+    """
+    import tables
+    
+    ## Load it, so we know what expectedrows is
+    # This loads all whisker info into C data types
+    # wv is like an array of trace.LP_cWhisker_Seg
+    # Each entry is a trace.cWhisker_Seg and can be converted to
+    # a python object via: wseg = trace.Whisker_Seg(wv[idx])
+    # The python object responds to .time and .id (integers) and .x and .y (numpy
+    # float arrays).
+    wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
+
+    # Open file
+    h5file = tables.open_file(h5_filename, mode="w")
+
+    # A group for the normal data
+    table = h5file.create_table(h5file.root, "summary", WhiskerSeg, 
+        "Summary data about each whisker segment",
+        expectedrows=nwhisk)
+
+    # Put the contour here
+    xpixels_vlarray = h5file.create_vlarray(
+        h5file.root, 'pixels_x', 
+        tables.Float32Atom(shape=()),
+        title='Every pixel of each whisker (x-coordinate)',
+        expectedrows=nwhisk)
+    ypixels_vlarray = h5file.create_vlarray(
+        h5file.root, 'pixels_y', 
+        tables.Float32Atom(shape=()),
+        title='Every pixel of each whisker (y-coordinate)',
+        expectedrows=nwhisk)
+
+
+    ## Iterate over rows and store
+    h5seg = table.row
+    for idx in range(nwhisk):
+        # Announce
+        if verbose and np.mod(idx, 10000) == 0:
+            print idx
+
+        # Get the C object and convert to python
+        # I suspect this is the bottleneck in speed
+        cws = wv[idx]
+        wseg = trace.Whisker_Seg(cws)
+
+        # Write to the table
+        h5seg['time'] = wseg.time
+        h5seg['id'] = wseg.id
+        h5seg['fol_x'] = wseg.x[0]
+        h5seg['fol_y'] = wseg.y[0]
+        h5seg['tip_x'] = wseg.x[-1]
+        h5seg['tip_y'] = wseg.y[-1]
+        h5seg['pixlen'] = len(wseg.x)
+        assert len(wseg.x) == len(wseg.y)
+        h5seg.append()
+        
+        # Write x
+        xpixels_vlarray.append(wseg.x)
+        ypixels_vlarray.append(wseg.y)
+
+        if np.mod(idx, flush_interval) == 0:
+            table.flush()
+
+    h5file.close()    
+
+
+def get_whisker_ends_hdf5(hdf5_file=None, side=None, 
+    also_calculate_length=True):
+    """Reimplement get_whisker_ends on hdf5 file"""
+    import tables
+    # Get the summary
+    with tables.open_file(hdf5_file) as fi:
+        summary = pandas.DataFrame.from_records(fi.root.summary.read())
+    
+    # Rename
+    summary = summary.rename(columns={'time': 'frame', 'id': 'seg'})
+    
+    # Assign tip and follicle
+    if side == 'left':
+        # Identify which are backwards
+        switch_mask = summary['tip_x'] < summary['fol_x']
+        
+        # Switch those rows
+        new_summary = summary.copy()
+        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
+        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
+        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
+        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
+        summary = new_summary
+    elif side is None:
+        pass
+    else:
+        raise NotImplementedError
+
+    # length
+    if also_calculate_length:
+        summary['length'] = np.sqrt(
+            (summary['tip_y'] - summary['fol_y']) ** 2 + 
+            (summary['tip_x'] - summary['fol_x']) ** 2)
+    
+    return summary    
+
+## More HDF5 stuff
+def get_summary(h5file):
+    """Return summary metadata of all whiskers"""
+    return pandas.DataFrame.from_records(h5file.root.summary.read())
+
+def get_x_pixel_handle(h5file):
+    return h5file.root.pixels_x
+
+def get_y_pixel_handle(h5file):
+    return h5file.root.pixels_y
+
+def select_pixels(h5file, **kwargs):
+    summary = get_summary(h5file)
+    mask = my.pick(summary, **kwargs)
+    
+    # For some reason, pixels_x[fancy] is slow
+    res = [
+        np.array([
+            h5file.root.pixels_x[idx], 
+            h5file.root.pixels_y[idx], 
+            ])
+        for idx in mask]
+    return res
+## End HDF5 stuff
