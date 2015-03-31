@@ -2,6 +2,7 @@
 import traj, trace
 import numpy as np, pandas
 import scipy.ndimage
+import my
 try:
     import tables
 except ImportError:
@@ -219,6 +220,9 @@ def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
     return resdf
 
 
+
+## Functions for extracting objects from video
+
 def get_object_size_and_centroid(objects):
     """Returns size and centroid of every object.
     
@@ -264,7 +268,7 @@ def is_centroid_in_roi(centroid, roi_x, roi_y):
         centroid[1] >= roi_y[0] and centroid[1] < roi_y[1]
         )
 
-def get_edge(object_mask):
+def get_left_edge(object_mask):
     """Return the left edge of the object.
     
     Currently, for each row, we take the left most nonzero value. We
@@ -280,7 +284,7 @@ def get_edge(object_mask):
             contour.append((nrow, true_cols[0]))
     return np.asarray(contour)
 
-def get_edge2(object_mask):
+def get_bottom_edge(object_mask):
     """Return the bottom edge of the object.
     
     Currently, for each row, we take the left most nonzero value. We
@@ -302,8 +306,112 @@ def plot_all_objects(objects, nobjects):
         axa[object_id].imshow(objects == object_id)
     plt.show()
 
+def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
+    roi_y=(0, 480), size_threshold=10000, edge_getter=get_bottom_edge,
+    meth='largest_in_roi'):
+    """Find the left edge of the shape in frame.
+    
+    This is a wrapper around the other utility functions
+    
+    1. Thresholds image to find dark spots
+    2. Segments the dark spots using scipy.ndimage.label
+    3. Chooses the largest dark spot within the ROI
+    4. Finds the left edge of this spot
+    
+    meth: largest_with_centroid_in_roi, largest_in_roi
+    
+    Returns: left edge, as sequence of (x, y) pairs
+        If no acceptable object is found, returns None.
+    """
+    # Segment image
+    binframe = frame < lum_threshold
+    objects, nobjects = scipy.ndimage.label(binframe)
 
+    if meth == 'largest_with_centroid_in_roi':
+        # Get size and centroid of each object
+        szs, centroids = get_object_size_and_centroid(objects)
 
+        # Find which objects are in the ROI
+        mask_is_in_roi = np.asarray([is_centroid_in_roi(centroid,
+            roi_x, roi_y) for centroid in centroids])
+
+    # Get largest object that is anywhere in roi
+    if meth == 'largest_in_roi':
+        szs = np.array([np.sum(objects == nobject) for nobject in range(nobjects + 1)])
+        subframe = objects[
+            np.min(roi_y):np.max(roi_y),
+            np.min(roi_x):np.max(roi_x)]
+        is_in_roi = np.unique(subframe)
+        mask_is_in_roi = np.zeros(nobjects + 1, dtype=np.bool)
+        mask_is_in_roi[is_in_roi] = True
+
+    # Choose the largest one in the ROI that is not background
+    mask_is_in_roi[0] = 0 # do not allow background
+    if np.sum(mask_is_in_roi) == 0:
+        #raise ValueError("no objects found in ROI")
+        return None
+    best_id = np.where(mask_is_in_roi)[0][np.argmax(szs[mask_is_in_roi])]
+
+    # Error if no object found above sz 10000 (100x100)
+    if szs[best_id] < 10000:
+        #raise ValueError("all objects in the ROI are too small")
+        return None
+
+    # Get the contour of the object
+    best_object = objects == best_id
+    edge = edge_getter(best_object)
+    
+    return edge
+
+def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
+    lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
+    return_frames_instead=False):
+    """Top-level function for extracting edges from video
+    
+    Uses process_chunks_of_video and find_edge_of_shape
+    Typically you want to test on a small number of frames to make sure
+    it's working.
+    
+    return_frames_instead : for debugging. If True, return the raw frames
+        instead of the edges
+    
+    Returns: edge_a
+    """
+    
+    # Helper function to pass to process_chunks_of_video
+    def mapfunc(frame):
+        """Gets the edge from each frame"""
+        edge = find_edge_of_shape(frame, lum_threshold=50,
+            roi_x=roi_x, roi_y=roi_y, edge_getter=get_bottom_edge)
+        if edge is None:
+            return None
+        else:
+            return edge.astype(np.int16)
+
+    if return_frames_instead:
+        mapfunc = 'keep'
+
+    # Get the edges
+    edge_a = my.misc.process_chunks_of_video(video_file, 
+        n_frames=n_frames,
+        func=mapfunc,
+        verbose=verbose,
+        finalize='listcomp')
+
+    return edge_a
+
+def plot_edge_subset(edge_a, stride=200, xlim=(0, 640), ylim=(480, 0)):
+    """Overplot the edges to test whether they were detected"""
+    import matplotlib.pyplot as plt
+    f, ax = plt.subplots()
+    for edge in edge_a[::stride]:
+        if edge is not None:
+            ax.plot(edge[:, 1], edge[:, 0])
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    plt.show()
+
+## End of functions for extracting objects from video
 
 
 ## Begin stuff for putting whisker data into HDF5
