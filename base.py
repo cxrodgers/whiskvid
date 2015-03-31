@@ -2,6 +2,10 @@
 import traj, trace
 import numpy as np, pandas
 import scipy.ndimage
+try:
+    import tables
+except ImportError:
+    pass
 
 def load_whisker_traces(whisk_file):
     """Load the traces, return as frame2segment_id2whisker_seg"""
@@ -303,15 +307,17 @@ def plot_all_objects(objects, nobjects):
 
 
 ## Begin stuff for putting whisker data into HDF5
-class WhiskerSeg(tables.IsDescription):
-    import tables
-    time = tables.UInt32Col()
-    id = tables.UInt16Col()
-    tip_x = tables.Float32Col()
-    tip_y = tables.Float32Col()
-    fol_x = tables.Float32Col()
-    fol_y = tables.Float32Col()
-    pixlen = tables.UInt16Col()
+try:
+    class WhiskerSeg(tables.IsDescription):
+        time = tables.UInt32Col()
+        id = tables.UInt16Col()
+        tip_x = tables.Float32Col()
+        tip_y = tables.Float32Col()
+        fol_x = tables.Float32Col()
+        fol_y = tables.Float32Col()
+        pixlen = tables.UInt16Col()
+except NameError:
+    pass
 
 def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
     flush_interval=100000):
