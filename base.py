@@ -572,7 +572,7 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
     fol_range_x=(0, 70), fol_range_y=(250, 360)):
     # Get the ends
-    resdf = whiskvid.get_whisker_ends_hdf5(h5_filename, side=side)
+    resdf = get_whisker_ends_hdf5(h5_filename, side=side)
 
     # Drop everything < thresh
     resdf = resdf[resdf['length'] >= length_thresh]
