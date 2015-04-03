@@ -429,7 +429,7 @@ except NameError:
     pass
 
 def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
-    flush_interval=100000):
+    flush_interval=100000, truncate_seg=None):
     """Load data from whisk_file and put it into an hdf5 file
     
     The HDF5 file will have two basic components:
@@ -439,6 +439,8 @@ def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
         /pixels_x : A vlarray of the same length as summary but with the
             entire array of x-coordinates of each segment.
         /pixels_y : Same but for y-coordinates
+    
+    truncate_seg : for debugging, stop after this many segments
     """
     import tables
     
@@ -450,6 +452,8 @@ def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
     # The python object responds to .time and .id (integers) and .x and .y (numpy
     # float arrays).
     wv, nwhisk = trace.Debug_Load_Whiskers(whisk_filename)
+    if truncate_seg is not None:
+        nwhisk = truncate_seg
 
     # Open file
     h5file = tables.open_file(h5_filename, mode="w")
@@ -570,7 +574,8 @@ def select_pixels(h5file, **kwargs):
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
-    fol_range_x=(0, 70), fol_range_y=(250, 360)):
+    fol_range_x=(0, 70), fol_range_y=(250, 360),
+    verbose=True):
     # Get the ends
     resdf = get_whisker_ends_hdf5(h5_filename, side=side)
 
@@ -588,11 +593,14 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     # Find the contacts
     # For every frame, iterate through whiskers and compare to shape
     contacts_l = []
-    for nframe, edge_frame in enumerate(edge_a):
+    for frame, frame_tips in resdf.groupby('frame'):
+        # Use the fact that edge_a goes from frame 0 to end
+        edge_frame = edge_a[frame]
         if edge_frame is None:
             continue
-        
-        frame_tips = my.pick_rows(resdf, frame=nframe)
+
+        if verbose and np.mod(frame, 1000) == 0:
+            print frame
         
         for idx, frame_tip in frame_tips.iterrows():
             dists = np.sqrt(
