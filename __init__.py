@@ -15,6 +15,7 @@ names (and no __init__.py), so probably put it on the end of the path.
 import traj
 import trace
 
+import db
 
 # Import the functions for analyzing data
 from base import *
