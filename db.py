@@ -48,7 +48,8 @@ def add_trials_to_tac(tac, v2b_fit, trial_matrix, drop_late_contacts=False):
             tac['btime'].values) - 1]    
 
     # Add rewside and outcome to tac
-    tac = tac.join(trial_matrix[['rewside', 'outcome', 'choice_time']], 
+    tac = tac.join(trial_matrix[[
+        'rewside', 'outcome', 'choice_time', 'isrnd', 'choice']], 
         on='trial')
     tac['t_wrt_choice'] = tac['btime'] - tac['choice_time']
     
