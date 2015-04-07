@@ -1,4 +1,5 @@
 """For dealing with db of high-speed video stuff"""
+import os
 import numpy as np
 import pandas
 import ArduFSM
