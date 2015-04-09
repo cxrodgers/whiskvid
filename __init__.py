@@ -20,3 +20,8 @@ import db
 # Import the functions for analyzing data
 from base import *
 
+
+try:
+    import output_video
+except ImportError:
+    pass

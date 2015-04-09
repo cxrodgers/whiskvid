@@ -84,6 +84,9 @@ def dump_edge_summary(trial_matrix, edge_a, b2v_fit, v_width, v_height,
     offset : time relative to choice time at which frame is dumped
     edge_summary_filename : where to dump results, if anywhere
     
+    Check if there is a bug here when the edge is in the last row and is
+    not in the histogram.
+    
     Returns: {
         'row_edges': row_edges, 'col_edges': col_edges, 
         'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}    
