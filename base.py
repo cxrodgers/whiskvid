@@ -308,7 +308,7 @@ def plot_all_objects(objects, nobjects):
 
 def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     roi_y=(0, 480), size_threshold=10000, edge_getter=get_bottom_edge,
-    meth='largest_in_roi'):
+    meth='largest_in_roi', split_iters=10):
     """Find the left edge of the shape in frame.
     
     This is a wrapper around the other utility functions
@@ -320,12 +320,18 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     
     meth: largest_with_centroid_in_roi, largest_in_roi
     
-    Returns: left edge, as sequence of (x, y) pairs
+    Returns: bottom edge, as sequence of (y, x) (or row, col) pairs
         If no acceptable object is found, returns None.
     """
     # Segment image
     binframe = frame < lum_threshold
-    objects, nobjects = scipy.ndimage.label(binframe)
+    
+    # Split apart the pipes and the shape
+    opened_binframe = scipy.ndimage.morphology.binary_opening(
+        binframe, iterations=split_iters)
+    
+    # Label them
+    objects, nobjects = scipy.ndimage.label(opened_binframe)
 
     if meth == 'largest_with_centroid_in_roi':
         # Get size and centroid of each object
@@ -365,7 +371,7 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
 
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
-    return_frames_instead=False, meth='largest_in_roi'):
+    return_frames_instead=False, meth='largest_in_roi', split_iters=10):
     """Top-level function for extracting edges from video
     
     Uses process_chunks_of_video and find_edge_of_shape
@@ -383,7 +389,7 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         """Gets the edge from each frame"""
         edge = find_edge_of_shape(frame, lum_threshold=50,
             roi_x=roi_x, roi_y=roi_y, edge_getter=get_bottom_edge,
-            meth=meth)
+            meth=meth, split_iters=split_iters)
         if edge is None:
             return None
         else:
