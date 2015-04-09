@@ -8,6 +8,9 @@ import my.plot
 import numpy as np
 import whiskvid
 
+class OutOfFrames(BaseException):
+    pass
+    
 def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
     edge_a, output_filename, frame_triggers, 
     trigger_dstart=-250, trigger_dstop=50,
@@ -107,7 +110,7 @@ def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
                 print "reloading input buffer", frame
                 raw_image = in_pipe.stdout.read(read_size)
                 if len(raw_image) < read_size:
-                    raise ValueError("out of frames")
+                    raise OutOfFrames
                 flattened_im = np.fromstring(raw_image, dtype='uint8')
                 reshaped_im = flattened_im.reshape(
                     (in_buff_sz, v_height, v_width))
@@ -142,9 +145,8 @@ def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
             string = f.canvas.tostring_argb()
             p.stdin.write(string)
 
-    except ValueError:
-        print "out of frames, probably"
-        raise
+    except OutOfFrames:
+        print "out of frames"
 
     finally:
         # Finish up
