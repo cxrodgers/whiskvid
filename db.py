@@ -221,7 +221,7 @@ def create_db_from_root_dir(root_dir='/home/chris/whisker_video',
     df = pandas.DataFrame.from_records(rec_l).set_index('session').sort()
 
     if savename is not None:
-        df.to_csv(savename)
+        save_db(df, savename)
     
     return df
 ## End functions to create a db from scratch
@@ -255,9 +255,9 @@ def add_bfile_to_session_nodb(date_s, session_dir):
 ## End functions to create a new session directory
 
 ## Load db functions
-def save_db(filename='/home/chris/dev/whisker_db/db.csv'):
+def save_db(db, filename='/home/chris/dev/whisker_db/db.csv'):
     # deal with floating point and column order here
-    pass
+    db.to_csv(filename)
 
 def load_db(filename='/home/chris/dev/whisker_db/db.csv'):
     return pandas.read_csv(filename, index_col='session')
@@ -300,6 +300,7 @@ def load_everything_from_session(session, db):
         'trial_matrix': trial_matrix, 'tac': tac,
         'edge_a': edge_a, 'edge_summary': edge_summary, 
         'overlay_image': overlay_image}
+
 
 def add_trials_to_tac(tac, v2b_fit, trial_matrix, drop_late_contacts=False):
     """Add the trial numbers to tac and return it
