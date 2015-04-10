@@ -3,6 +3,8 @@ import traj, trace
 import numpy as np, pandas
 import scipy.ndimage
 import my
+import whiskvid
+import matplotlib.pyplot as plt
 try:
     import tables
 except ImportError:
@@ -577,6 +579,99 @@ def select_pixels(h5file, **kwargs):
 ## End HDF5 stuff
 
 
+## Calculating contacts
+def calculate_contacts_manual_params_db(session, **kwargs):
+    """Gets manual params and saves to db"""
+    # Get metadata
+    db = whiskvid.db.load_db()
+    row = db.ix[session]
+    
+    # Get manual params
+    params = calculate_contacts_manual_params(row['vfile'], interactive=True, 
+        **kwargs)
+    for key, value in params.items():
+        db.loc[session, key] = value
+    
+    # Save
+    whiskvid.db.save_db(db)  
+    1/0
+
+def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
+    """Display a subset of video frames to set fol_x and fol_y"""
+    # Not sure why this doesn't work if it's lower down in the function
+    if interactive:
+        plt.ion()        
+
+    # Get frames
+    duration = my.misc.get_video_duration(vfile)
+    frametimes = np.linspace(0, duration, n_frames)
+    frames = []
+    for frametime in frametimes:
+        frame, stdout, stderr = my.misc.frame_dump_pipe(vfile, frametime)
+        frames.append(frame)
+    
+    # Plot them
+    f, axa = plt.subplots(1, 4, figsize=(15, 4))
+    for frame, ax in zip(frames, axa.flatten()):
+        my.plot.imshow(frame, ax=ax, axis_call='image')
+
+    # Get interactive results
+    res = {}
+    if interactive:
+        params_l = ['fol_x0', 'fol_x1', 'fol_y0', 'fol_y1']
+        lines = []
+        try:
+            while True:
+                for line in lines:
+                    line.set_visible(False)    
+                plt.draw()
+                
+                # Get entries for each params
+                for param in params_l:
+                    while True:
+                        try:
+                            val = raw_input("Enter %s: " % param)
+                            break
+                        except ValueError:
+                            print "invalid entry"
+                    res[param] = int(val)
+
+                # Draw results
+                for ax in axa:
+                    lines.append(ax.plot(
+                        ax.get_xlim(), [res['fol_y0'], res['fol_y0']], 'k-')[0])
+                    lines.append(ax.plot(
+                        ax.get_xlim(), [res['fol_y1'], res['fol_y1']], 'k-')[0])
+                    lines.append(ax.plot(
+                        [res['fol_x0'], res['fol_x0']], ax.get_ylim(), 'k-')[0])            
+                    lines.append(ax.plot(
+                        [res['fol_x1'], res['fol_x1']], ax.get_ylim(), 'k-')[0])
+                plt.draw()
+
+                # Get confirmation
+                choice = raw_input("Confirm [y/n/q]: ")
+                if choice == 'q':
+                    res = {}
+                    print "cancelled"
+                    break
+                elif choice == 'y':
+                    break
+                else:
+                    pass
+        except KeyboardInterrupt:
+            res = {}
+            print "cancelled"
+        finally:
+            plt.ioff()
+    return res    
+    
+def calculate_contacts_session(session, db=None, **kwargs):
+    """Calls `calculate_contacts` on `session`"""
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
+        tac_filename=row['tac'], **kwargs)
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
@@ -625,3 +720,6 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     if tac_filename is not None:
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
+
+## End calculating contacts
+
