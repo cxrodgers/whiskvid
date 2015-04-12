@@ -647,6 +647,42 @@ def crop_session_nodb(input_file, output_file, crop_x0, crop_x1,
 
 ## end cropping
 
+## tracing
+def trace_session(session, db=None, **kwargs):
+    """Crops the input file into the output file, and updates db"""
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    
+    # Generate output file name
+    if pandas.isnull(db.loc[session, 'whiskers']):
+        output_file = os.path.join(row['session_dir'], session + '.whiskers')
+        db.loc[session, 'whiskers'] = output_file
+    
+    trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])
+    
+    # Save
+    whiskvid.db.save_db(db)  
+
+def trace_session_nodb(input_file, output_file, verbose=False):
+    """Trace whiskers from input to output"""
+    cmd = 'trace %s %s' % (input_file, output_file)
+    run_dir = os.path.split(input_file)[0]
+    run_dir2 = os.path.split(output_file)[0]
+    if run_dir != run_dir2:
+        raise ValueError("warning: trace I/O needs same dir")
+    if verbose:
+        print cmd
+    
+    orig_dir = os.getcwd()
+    os.chdir(run_dir)
+    try:        
+        os.system(cmd)
+    except:
+        pass
+    finally:
+        os.chdir(orig_dir)
+
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):
     """Gets manual params and saves to db"""
