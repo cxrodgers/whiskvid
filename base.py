@@ -1,6 +1,7 @@
 """Functions for analyzing whiski data"""
 import traj, trace
 import numpy as np, pandas
+import os
 import scipy.ndimage
 import my
 import whiskvid
@@ -578,6 +579,73 @@ def select_pixels(h5file, **kwargs):
     return res
 ## End HDF5 stuff
 
+
+## cropping
+def crop_manual_params_db(session, interactive=True, **kwargs):
+    """Get crop size and save to db"""
+    # Get metadata
+    db = whiskvid.db.load_db()
+    db_changed = False
+    row = db.ix[session]
+    
+    # Get manual params
+    if pandas.isnull(row['input_vfile']):
+        raise ValueError("no input_vfile for", session)
+    params = crop_manual_params(row['input_vfile'], 
+        interactive=interactive, **kwargs)
+    
+    # Save in db
+    for key, value in params.items():
+        if not pandas.isnull(db.loc[session, key]):
+            print "warning: overwriting %s in %s" % (key, session)
+        db.loc[session, key] = value
+        db_changed = True
+    
+    # Save db
+    if db_changed:
+        whiskvid.db.save_db(db)     
+    else:
+        print "no changes made to crop in", session
+
+def crop_manual_params(vfile, interactive=True, **kwargs):
+    """Use choose_rectangular_ROI to set cropping params"""
+    res = my.video.choose_rectangular_ROI(vfile, interactive=interactive,
+        **kwargs)
+    
+    if len(res) == 0:
+        return res
+    
+    # Rename the keys
+    res2 = {}
+    for key in res:
+        res2['crop_' + key] = res[key]
+    return res2    
+
+def crop_session(session, db=None, **kwargs):
+    """Crops the input file into the output file, and updates db"""
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    
+    # Generate output file name
+    if pandas.isnull(db.loc[session, 'vfile']):
+        output_file = os.path.join(row['session_dir'], session + '_cropped.mp4')
+        db.loc[session, 'vfile'] = output_file
+    
+    crop_session_nodb(row['input_vfile'], db.loc[session, 'vfile'],
+        row['crop_x0'], row['crop_x1'], row['crop_y0'], row['crop_y1'],
+        **kwargs)
+
+    # Save
+    whiskvid.db.save_db(db)  
+
+def crop_session_nodb(input_file, output_file, crop_x0, crop_x1, 
+    crop_y0, crop_y1, **kwargs):
+    """Crops the input file into the output file"""
+    my.video.crop(input_file, output_file, crop_x0, crop_x1, 
+        crop_y0, crop_y1, **kwargs)
+
+## end cropping
 
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):
