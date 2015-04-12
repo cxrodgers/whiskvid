@@ -598,72 +598,17 @@ def calculate_contacts_manual_params_db(session, **kwargs):
 
 def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
     """Display a subset of video frames to set fol_x and fol_y"""
-    # Not sure why this doesn't work if it's lower down in the function
-    if interactive:
-        plt.ion()        
-
-    # Get frames
-    duration = my.misc.get_video_duration(vfile)
-    frametimes = np.linspace(0, duration, n_frames)
-    frames = []
-    for frametime in frametimes:
-        frame, stdout, stderr = my.misc.frame_dump_pipe(vfile, frametime)
-        frames.append(frame)
+    res = my.video.choose_rectangular_ROI(vfile, n_frames=n_frames, 
+        interactive=interactive)
     
-    # Plot them
-    f, axa = plt.subplots(1, 4, figsize=(15, 4))
-    for frame, ax in zip(frames, axa.flatten()):
-        my.plot.imshow(frame, ax=ax, axis_call='image')
-
-    # Get interactive results
-    res = {}
-    if interactive:
-        params_l = ['fol_x0', 'fol_x1', 'fol_y0', 'fol_y1']
-        lines = []
-        try:
-            while True:
-                for line in lines:
-                    line.set_visible(False)    
-                plt.draw()
-                
-                # Get entries for each params
-                for param in params_l:
-                    while True:
-                        try:
-                            val = raw_input("Enter %s: " % param)
-                            break
-                        except ValueError:
-                            print "invalid entry"
-                    res[param] = int(val)
-
-                # Draw results
-                for ax in axa:
-                    lines.append(ax.plot(
-                        ax.get_xlim(), [res['fol_y0'], res['fol_y0']], 'k-')[0])
-                    lines.append(ax.plot(
-                        ax.get_xlim(), [res['fol_y1'], res['fol_y1']], 'k-')[0])
-                    lines.append(ax.plot(
-                        [res['fol_x0'], res['fol_x0']], ax.get_ylim(), 'k-')[0])            
-                    lines.append(ax.plot(
-                        [res['fol_x1'], res['fol_x1']], ax.get_ylim(), 'k-')[0])
-                plt.draw()
-
-                # Get confirmation
-                choice = raw_input("Confirm [y/n/q]: ")
-                if choice == 'q':
-                    res = {}
-                    print "cancelled"
-                    break
-                elif choice == 'y':
-                    break
-                else:
-                    pass
-        except KeyboardInterrupt:
-            res = {}
-            print "cancelled"
-        finally:
-            plt.ioff()
-    return res    
+    if len(res) == 0:
+        return res
+    
+    # Rename the keys
+    res2 = {}
+    for key in res:
+        res2['fol_' + key] = res[key]
+    return res2
     
 def calculate_contacts_session(session, db=None, **kwargs):
     """Calls `calculate_contacts` on `session`"""

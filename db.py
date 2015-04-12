@@ -45,7 +45,7 @@ import numpy as np
 import pandas
 import ArduFSM
 import my
-
+from my import globjoin
 
 ## Functions to create a db from scratch
 def only_one_or_none(l):
@@ -55,9 +55,6 @@ def only_one_or_none(l):
         return val
     except my.misc.UniquenessError:
         return None
-
-def globjoin(dirname, pattern):
-    return glob.glob(os.path.join(dirname, pattern))
 
 def remove_skipped(hits, skip_if_includes_l):
     """Returns those hits that don't include a string from skip_if_includes_l"""
