@@ -40,6 +40,7 @@ Try to make each stage done by functions:
       first
 """
 import os
+import shutil
 import glob
 import numpy as np
 import pandas
@@ -232,19 +233,43 @@ def generate_session_name(input_file):
     """Given a source video file, generate the session name"""
     return os.path.splitext(os.path.split(os.path.abspath(input_file))[1])[0]
 
-def create_session_directory(input_file, session, root_dir=ROOT_DIR):
+def create_session_directory(input_file, session, verbose=True):
+    """Create a new session directory with an input file and parameters
+    
+    input_file : video file to become the sources of the new session
+    session : name of the session, typically generated with 
+        generate_session_name
+    
+    A directory named `session` will be created within ROOT_DIR.
+    The db will be updated and saved.
+    """
+    db = load_db()
+    session_dir = create_session_directory_nodb(input_file, session, 
+        verbose=verbose)
+    db.loc[session, 'session_dir'] = session_dir
+    db.loc[session, 'root_dir'] = ROOT_DIR
+    db.loc[session, 'input_vfile'] = input_file
+    save_db(db)
+
+def create_session_directory_nodb(input_file, session, root_dir=ROOT_DIR,
+    verbose=True):
     """Create a new session directory with an input file and parameters"""
     # Create a session directory
     session_dir = os.path.join(root_dir, session)
-    assert not os.path.exists(session_dir)
+    if os.path.exists(session_dir):
+        raise ValueError("session dir already exists:", session_dir)
+    if verbose:
+        print "creating", session_dir
     os.mkdir(session_dir)
     
-    # Copy the input file into it
-    shutil.copyfile(input_file, session_dir)
-    
     # Copy the default.parameters into it
-    shutil.copyfile(os.path.join(root_dir, 'default.parameters'),
-        session_dir)
+    if verbose:
+        print "copying params"
+    shutil.copyfile(
+        os.path.join(root_dir, 'sensitive.parameters'),
+        os.path.join(session_dir, 'default.parameters'))
+    
+    return session_dir
 
 def find_closest_bfile(date_string, 
     behavior_dir='/home/chris/runmice/L0/logfiles'):
