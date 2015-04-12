@@ -679,7 +679,7 @@ def trace_session_nodb(input_file, output_file, verbose=False):
     try:        
         os.system(cmd)
     except:
-        pass
+        raise
     finally:
         os.chdir(orig_dir)
 
