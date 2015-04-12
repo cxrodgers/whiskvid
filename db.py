@@ -47,6 +47,10 @@ import ArduFSM
 import my
 from my import globjoin
 
+ROOT_DIR = '/home/chris/whisker_video'
+INPUT_HSV_DIR = '/home/chris/mnt/nas2_cifs/whisker_video_to_trace'
+
+
 ## Functions to create a db from scratch
 def only_one_or_none(l):
     """Returns only_one(l), or None if error"""
@@ -137,7 +141,7 @@ class ContactVideo(FileFinder):
     glob_pattern = '*edge_tac_overlay.mp4'
 
 
-def create_db_from_root_dir(root_dir='/home/chris/whisker_video',
+def create_db_from_root_dir(root_dir=ROOT_DIR,
     savename=None):
     """Searches root dir and forms db of existing result files
     
@@ -224,6 +228,24 @@ def create_db_from_root_dir(root_dir='/home/chris/whisker_video',
 ## End functions to create a db from scratch
 
 ## Functions to create a new session directory
+def generate_session_name(input_file):
+    """Given a source video file, generate the session name"""
+    return os.path.splitext(os.path.split(os.path.abspath(input_file))[1])[0]
+
+def create_session_directory(input_file, session, root_dir=ROOT_DIR):
+    """Create a new session directory with an input file and parameters"""
+    # Create a session directory
+    session_dir = os.path.join(root_dir, session)
+    assert not os.path.exists(session_dir)
+    os.mkdir(session_dir)
+    
+    # Copy the input file into it
+    shutil.copyfile(input_file, session_dir)
+    
+    # Copy the default.parameters into it
+    shutil.copyfile(os.path.join(root_dir, 'default.parameters'),
+        session_dir)
+
 def find_closest_bfile(date_string, 
     behavior_dir='/home/chris/runmice/L0/logfiles'):
     """Given a date string like 150313, find the bfile from that day"""
