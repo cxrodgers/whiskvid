@@ -437,7 +437,24 @@ try:
 except NameError:
     pass
 
-def put_whiskers_into_hdf5(whisk_filename, h5_filename, verbose=True,
+def put_whiskers_into_hdf5(session, db=None, **kwargs):
+    """Puts whiskers for session and updates db"""
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    
+    # Generate output file name
+    if pandas.isnull(db.loc[session, 'wseg_h5']):
+        output_file = os.path.join(row['session_dir'], session + '.wseg.h5')
+        db.loc[session, 'wseg_h5'] = output_file
+    
+    put_whiskers_into_hdf5_nodb(row['whiskers'], db.loc[session, 'wseg_h5'],
+        **kwargs)
+
+    # Save
+    whiskvid.db.save_db(db)      
+
+def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
     flush_interval=100000, truncate_seg=None):
     """Load data from whisk_file and put it into an hdf5 file
     
@@ -656,7 +673,7 @@ def trace_session(session, db=None, **kwargs):
     
     # Generate output file name
     if pandas.isnull(db.loc[session, 'whiskers']):
-        output_file = os.path.join(row['session_dir'], session + '.whiskers')
+        output_file = Whiskers.generate_name(row['session_dir'])
         db.loc[session, 'whiskers'] = output_file
     
     trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])

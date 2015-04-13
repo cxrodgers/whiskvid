@@ -94,6 +94,17 @@ class RawVideo(FileFinder):
 class Whiskers(FileFinder):
     """Finds raw video files"""
     glob_pattern = '*.whiskers'
+    
+    @classmethod
+    def generate_name(self, dirname):
+        """Generate a whiskers name based on the video name.
+        
+        It has to match so that whiski knows how to load it.
+        """
+        raw_video_name = RawVideo.find(dirname)
+        if raw_video_name is None:
+            raise IOError("cannot find unique video in", dirname)
+        return os.path.splitext(raw_video_name)[0] + '.whiskers'
 
 class EdgesAll(FileFinder):
     """Finds files that contain all edges by frame"""
