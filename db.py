@@ -110,6 +110,12 @@ class EdgesAll(FileFinder):
     """Finds files that contain all edges by frame"""
     glob_pattern = '*.edge_a.*'
     skip_if_includes_l = ['.bak']
+    
+    @classmethod
+    def generate_name(self, dirname):
+        """Generates an edges name"""
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.edge_a.npy')
 
 class WhiskersHDF5(FileFinder):
     """Finds HDF5-formatted whiskers file"""
