@@ -1082,6 +1082,7 @@ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
 
 ## Overlays
 # This needs to be rewritten for TrialFrameByTypes and TrialFrameAllTypes
+# Actually get this from 20150401_tac_analyze
 def make_overlay_image(session):
     if db is None:
         db = whiskvid.db.load_db()    
@@ -1124,3 +1125,106 @@ def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
     np.save(overlay_image_name, C)
 
 ## End overlays
+
+
+## edge_summary + tac
+def plot_tac(session):
+    db = whiskvid.db.load_db()
+
+    # Load stuff
+    res = whiskvid.db.load_everything_from_session(session, db)
+    tac = res['tac']
+    trial_matrix = res['trial_matrix']
+    v2b_fit = res['v2b_fit']
+
+    # Get trial timings
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+
+    # Add trials
+    tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
+        drop_late_contacts=True)
+
+    # Plot tac vs rewside
+    rewside2color = {'left': 'b', 'right': 'r'}
+    f, ax = plt.subplots()
+    gobj = my.pick_rows(tac, 
+        choice=['left', 'right'], outcome='hit', isrnd=True).groupby('rewside')
+    for rewside, subtac in gobj:
+        ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
+            color=rewside2color[rewside], mec='none', alpha=1)
+        ax.set_xlim((0, db.loc[session, 'v_width']))
+        ax.set_ylim((db.loc[session, 'v_height'], 0))
+        ax.set_title(session)
+    my.plot.rescue_tick(f=f, x=4, y=4)
+
+    # Plot tac vs choice
+    choice2color = {'left': 'b', 'right': 'r'}
+    f, ax = plt.subplots()
+    gobj = my.pick_rows(tac, 
+        choice=['left', 'right'], isrnd=True).groupby('choice')
+    for rewside, subtac in gobj:
+        ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
+            color=rewside2color[rewside], mec='none', alpha=1)
+        ax.set_xlim((0, db.loc[session, 'v_width']))
+        ax.set_ylim((db.loc[session, 'v_height'], 0))
+        ax.set_title(session)
+    my.plot.rescue_tick(f=f, x=4, y=4)
+
+    plt.show()
+
+def plot_edge_summary(session):
+    db = whiskvid.db.load_db()
+    
+    # Load overlay image and edge_a
+    everything = whiskvid.db.load_everything_from_session(session, db)
+    tac = everything['tac']
+    overlay_image = everything['overlay_image']
+
+    # Get behavior times
+    trial_matrix = everything['trial_matrix']
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+    choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
+    trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)
+
+    # Get hists
+    typical_edges_hist2d = np.sum(everything['edge_summary']['H_l'], axis=0)
+    typical_edges_row = everything['edge_summary']['row_edges']
+    typical_edges_col = everything['edge_summary']['col_edges']
+
+    # Plot H_l
+    f, axa = plt.subplots(1, 2)
+    f.suptitle(session)
+    #axa[0].imshow(overlay_image)
+    im = my.plot.imshow(typical_edges_hist2d, ax=axa[1],
+        axis_call='image')
+    f.savefig(os.path.join(row['root_dir'], session, 
+        session + '.edges.overlays.png'))
+    plt.show()
+
+def video_edge_tac(session):
+    db = whiskvid.db.load_db()
+    
+    everything = whiskvid.db.load_everything_from_session(session, db)
+    tac = everything['tac']   
+    trial_matrix = everything['trial_matrix']
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+    choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
+    trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)    
+
+    # Get hists
+    typical_edges_hist2d = np.sum(everything['edge_summary']['H_l'], axis=0)
+    typical_edges_row = everything['edge_summary']['row_edges']
+    typical_edges_col = everything['edge_summary']['col_edges']
+
+    video_filename = db.loc[session, 'vfile']
+    output_filename = whiskvid.db.ContactVideo.generate_name(
+        db.loc[session, 'session_dir'])
+    
+    frame_triggers = trial_matrix['choice_bframe'].values
+    
+    whiskvid.output_video.dump_video_with_edge_and_tac(
+        video_filename, typical_edges_hist2d, tac, everything['edge_a'],
+        output_filename, frame_triggers, trigger_dstart=-250, trigger_dstop=50,
+        d_temporal=2, d_spatial=1, post_contact_linger=75)    
+
+## end edge_summary + tac

@@ -191,6 +191,11 @@ class ContactVideo(FileFinder):
     """Finds video with overlaid edges and contacts"""
     glob_pattern = '*edge_tac_overlay.mp4'
 
+    @classmethod
+    def generate_name(self, dirname):
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, 
+            probable_session_name + '.edge_tac_overlay.mp4')        
 
 def create_db_from_root_dir(root_dir=ROOT_DIR,
     savename=None):
