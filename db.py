@@ -29,6 +29,8 @@ Stages of processing
     Video of contacts / edge summary
 
 4 and 5 can be done simultaneously. 7 can be done earlier.
+Probably best to do 7, and all manual param setting, at the beginning.
+Then everything else can be done overnight.
 
 Try to make each stage done by functions:
     * A low-level one that doesn't know about the db and just gets 
