@@ -4,6 +4,8 @@ import numpy as np, pandas
 import os
 import scipy.ndimage
 import my
+import ArduFSM
+import BeWatch
 import whiskvid
 import matplotlib.pyplot as plt
 try:
@@ -938,18 +940,20 @@ def dump_edge_summary(session, db=None, **kwargs):
     # Get behavior df
     bfile_name = db.loc[session, 'bfile']
     if pandas.isnull(bfile_name) or not os.path.exists(bfile_name):
-        raise IOError("cannot find bfile for", session)
+        raise IOError("cannot find bfile for %s" % session)
     trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
-    
+    if 'choice_time' not in trial_matrix:
+        trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(bfile_name)
+
     # Get edges
-    edge_a = EdgesAll.load(db.loc[session, 'session_dir'])
+    edge_a = whiskvid.db.EdgesAll.load(db.loc[session, 'edge'])
     b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
-    v_width, v_height = my.misc.get_video_aspect(db.loc[session, 'vfile'])
+    v_width, v_height = my.video.get_video_aspect(db.loc[session, 'vfile'])
     
     # Set up edge summary filename
     db_changed = False
     if pandas.isnull(db.loc[session, 'edge_summary']):
-        db.loc[session, 'edge_summary'] = EdgeSummary.generate_name(
+        db.loc[session, 'edge_summary'] = whiskvid.db.EdgesSummary.generate_name(
             db.loc[session, 'session_dir'])
         db_changed = True
     edge_summary_filename = db.loc[session, 'edge_summary']

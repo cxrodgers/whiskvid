@@ -118,6 +118,11 @@ class EdgesAll(FileFinder):
         """Generates an edges name"""
         probable_session_name = os.path.split(dirname)[1]
         return os.path.join(dirname, probable_session_name + '.edge_a.npy')
+    
+    @classmethod
+    def load(self, filename):
+        """Loads from file"""
+        return np.load(filename)
 
 class WhiskersHDF5(FileFinder):
     """Finds HDF5-formatted whiskers file"""
@@ -160,6 +165,15 @@ class TrialFramesDir(FileFinder):
 class EdgesSummary(FileFinder):
     """Finds pickle of histogrammed edges for each trial type"""
     glob_pattern = '*.edge_summary.pickle'
+
+    @classmethod
+    def generate_name(self, dirname):
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.edge_summary.pickle')
+    
+    @classmethod
+    def load(self, filename):
+        return pandas.read_pickle(filename)
 
 class TrialFramesByType(FileFinder):
     """Finds dataframe of trial frames, meaned by type"""
@@ -262,6 +276,28 @@ def create_db_from_root_dir(root_dir=ROOT_DIR,
         save_db(df, savename)
     
     return df
+
+def rescan_db():
+    """Go through existing db and check for any new files
+    
+    Currently only works for behavior file
+    """
+    db = load_db()
+    db_changed = False
+    
+    # Iterate sessions
+    for session in db.index:
+        if pandas.isnull(db.loc[session, 'bfile']):
+            # Look for new bfile
+            bfile = BehaviorLog.find(db.loc[session, 'session_dir'])
+            if bfile is not None:
+                print "bfile found", bfile
+                db.loc[session, 'bfile'] = bfile
+                db_changed = True
+
+    if db_changed:
+        save_db(db)
+
 ## End functions to create a db from scratch
 
 ## Functions to create a new session directory
