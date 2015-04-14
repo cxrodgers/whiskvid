@@ -848,7 +848,6 @@ def calculate_contacts_manual_params_db(session, **kwargs):
     
     # Save
     whiskvid.db.save_db(db)  
-    1/0
 
 def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
     """Display a subset of video frames to set fol_x and fol_y"""
