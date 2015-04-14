@@ -29,6 +29,8 @@ Stages of processing
     Video of contacts / edge summary
 
 4 and 5 can be done simultaneously. 7 can be done earlier.
+Probably best to do 7, and all manual param setting, at the beginning.
+Then everything else can be done overnight.
 
 Try to make each stage done by functions:
     * A low-level one that doesn't know about the db and just gets 
@@ -110,6 +112,12 @@ class EdgesAll(FileFinder):
     """Finds files that contain all edges by frame"""
     glob_pattern = '*.edge_a.*'
     skip_if_includes_l = ['.bak']
+    
+    @classmethod
+    def generate_name(self, dirname):
+        """Generates an edges name"""
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.edge_a.npy')
 
 class WhiskersHDF5(FileFinder):
     """Finds HDF5-formatted whiskers file"""
@@ -118,6 +126,12 @@ class WhiskersHDF5(FileFinder):
 class Contacts(FileFinder):
     """Finds dataframe of contact times and locations"""
     glob_pattern = '*.tac'
+
+    @classmethod
+    def generate_name(self, dirname):
+        """Generates a contacts file name"""
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.tac')
 
 class Fit(FileFinder):
     """Finds fit from behavior to video"""

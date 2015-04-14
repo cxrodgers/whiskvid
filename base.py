@@ -402,7 +402,7 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         mapfunc = 'keep'
 
     # Get the edges
-    edge_a = my.misc.process_chunks_of_video(video_file, 
+    edge_a = my.video.process_chunks_of_video(video_file, 
         n_frames=n_frames,
         func=mapfunc,
         verbose=verbose,
@@ -420,6 +420,139 @@ def plot_edge_subset(edge_a, stride=200, xlim=(0, 640), ylim=(480, 0)):
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     plt.show()
+
+
+
+def edge_frames_manual_params_db(session, interactive=True, **kwargs):
+    """Interactively set lum thresh and roi for edging
+    
+    Requires: row['vfile'] to exist
+    Sets: edge_roi_x, edge_roi_y, edge_lumthresh
+    """
+    # Get metadata
+    db = whiskvid.db.load_db()
+    db_changed = False
+    row = db.ix[session]
+    
+    # Get manual params
+    if pandas.isnull(row['vfile']):
+        raise ValueError("no vfile for", session)
+    params = edge_frames_manual_params(row['vfile'], 
+        interactive=interactive, **kwargs)
+    
+    # Save in db
+    for key, value in params.items():
+        if key in db:
+            if not pandas.isnull(db.loc[session, key]):
+                print "warning: overwriting %s in %s" % (key, session)
+        else:
+            print "warning: adding %s as a param" % key
+        db.loc[session, key] = value
+        db_changed = True
+    
+    # Save db
+    if db_changed:
+        whiskvid.db.save_db(db)     
+    else:
+        print "no changes made to edge in", session
+
+
+def edge_frames_manual_params(video_file, interactive=True, **kwargs):
+    width, height = my.video.get_video_aspect(video_file)
+    
+    # Try to find a frame with a good example of a shape
+    def keep_roi(frame):
+        height, width = frame.shape
+        return frame[:int(0.5 * height), int(0.5 * width):]
+    frames_a = my.video.process_chunks_of_video(video_file, n_frames=10000,
+        func='keep', frame_chunk_sz=1000, verbose=True, finalize='listcomp')
+    idxs = np.argsort([keep_roi(frame).min() for frame in frames_a])
+    best_frame = frames_a[idxs[0]]
+
+    # Plot it so we can set params
+    f, axa = plt.subplots(3, 3)
+    for good_frame, ax in zip(frames_a[idxs[::100]], axa.flatten()):
+        im = my.plot.imshow(good_frame, axis_call='image', ax=ax)
+        im.set_clim((0, 255))
+        my.plot.colorbar(ax=ax)
+        my.plot.rescue_tick(ax=ax, x=4, y=5)
+    plt.show()
+
+    # Get the shape roi
+    res = my.video.choose_rectangular_ROI(video_file, interactive=interactive,
+        **kwargs)
+    #~ if len(res) == 0:
+        #~ return res
+    
+    # Rename the keys
+    res2 = {}
+    for key in res:
+        res2['edge_roi_' + key] = res[key]
+
+    # Get the lum_threshold
+    lumthresh_s = raw_input("Enter lum threshold (eg, 50): ")
+    lumthresh_int = int(lumthresh_s)
+    res2['edge_lumthresh'] = lumthresh_int
+
+    #~ ## replot figure with params
+    #~ f, axa = plt.subplots(3, 3)
+    #~ for good_frame, ax in zip(frames_a[idxs[::100]], axa.flatten()):
+        #~ im = my.plot.imshow(good_frame > lum_threshold, axis_call='image', ax=ax)
+        #~ ax.plot(ax.get_xlim(), [roi_y[1], roi_y[1]], 'w:')
+        #~ ax.plot([roi_x[0], roi_x[0]], ax.get_ylim(), 'w:')
+        #~ my.plot.colorbar(ax=ax)
+        #~ my.plot.rescue_tick(ax=ax, x=4, y=5)
+    #~ plt.show()
+
+    return res2
+
+
+def edge_frames(session, db=None, **kwargs):
+    """Edges the frames and updates db"""
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    
+    # Generate output file name
+    if pandas.isnull(db.loc[session, 'edge']):
+        output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
+        db.loc[session, 'edge'] = output_file
+    
+    edge_frames_nodb(row['vfile'], db.loc[session, 'edge'],
+        lum_threshold=row['edge_lumthresh'],
+        edge_roi_x0=row['edge_roi_x0'], 
+        edge_roi_x1=row['edge_roi_x1'], 
+        edge_roi_y0=row['edge_roi_y0'], 
+        edge_roi_y1=row['edge_roi_y1'],
+        **kwargs)
+
+    # Save
+    whiskvid.db.save_db(db)  
+
+def edge_frames_nodb(video_file, edge_file, 
+    lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
+    split_iters=13, n_frames=np.inf, 
+    stride=100, **kwargs):
+    """Edge all frames and save to edge_file. Also debug plot"""
+    ## Now calculate the edges
+    width, height = my.video.get_video_aspect(video_file)
+    
+    # Get edges
+    edge_a = whiskvid.get_all_edges_from_video(video_file, 
+        n_frames=n_frames, 
+        lum_threshold=lum_threshold, 
+        roi_x=(edge_roi_x0, edge_roi_x1), roi_y=(edge_roi_y0, edge_roi_y1),
+        return_frames_instead=False,
+        meth='largest_in_roi', split_iters=split_iters, **kwargs)
+
+    # Save
+    np.save(edge_file, edge_a)
+
+    # Plot
+    whiskvid.plot_edge_subset(edge_a, stride=stride,    
+        xlim=(0, width), ylim=(height, 0))
+
+
 
 ## End of functions for extracting objects from video
 
@@ -673,7 +806,7 @@ def trace_session(session, db=None, **kwargs):
     
     # Generate output file name
     if pandas.isnull(db.loc[session, 'whiskers']):
-        output_file = Whiskers.generate_name(row['session_dir'])
+        output_file = whiskvid.db.Whiskers.generate_name(row['session_dir'])
         db.loc[session, 'whiskers'] = output_file
     
     trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])
@@ -715,7 +848,6 @@ def calculate_contacts_manual_params_db(session, **kwargs):
     
     # Save
     whiskvid.db.save_db(db)  
-    1/0
 
 def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
     """Display a subset of video frames to set fol_x and fol_y"""
@@ -736,8 +868,14 @@ def calculate_contacts_session(session, db=None, **kwargs):
     if db is None:
         db = whiskvid.db.load_db()
     row = db.ix[session]
+    
+    if pandas.isnull(row['tac']):
+        db.loc[session, 'tac'] = whiskvid.db.Contacts.generate_name(
+            row['session_dir'])
     tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
-        tac_filename=row['tac'], **kwargs)
+        tac_filename=db.loc[session, 'tac'], **kwargs)
+    
+    whiskvid.db.save_db(db)
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
@@ -783,7 +921,7 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     tips_and_contacts = resdf.join(contacts_df.set_index('index'))
     tips_and_contacts = tips_and_contacts[
         tips_and_contacts.closest_dist < contact_dist_thresh]
-    if tac_filename is not None:
+    if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
 
