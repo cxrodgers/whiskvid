@@ -1040,6 +1040,87 @@ def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
     if edge_summary_filename is not None:
         my.misc.pickle_dump(res, edge_summary_filename)
     return res
-
-
 ## End edge summary dumping
+
+## Frame dumping
+# Untested
+def dump_frames(session, db=None):
+    """Calls `dump_frames_nodb` on `session`"""
+    if db is None:
+        db = whiskvid.db.load_db()    
+
+    # Get behavior df
+    bfile_name = db.loc[session, 'bfile']
+    b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
+    video_file = db.loc[session, 'vfile']
+    
+    # Set up filename
+    db_changed = False
+    if pandas.isnull(db.loc[session, 'frames']):
+        db.loc[session, 'frames'] = whiskvid.db.TrialFramesDir.generate_name(
+            db.loc[session, 'session_dir'])
+        db_changed = True
+    frame_dir = db.loc[session, 'frames']
+    
+    # Dump frames   
+    dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir)
+
+    if db_changed:
+        whiskvid.db.save_db(db)
+
+def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
+    """Dump frames"""
+    # overlays
+    duration = my.video.get_video_duration(video_file)
+    metadata = {'filename': bfilename, 'fit0': b2v_fit[0], 'fit1': b2v_fit[1],
+        'guess_vvsb_start': 0, 'filename_video': video_file, 
+        'duration_video': duration * np.timedelta64(1, 's')}
+    if not os.path.exists(frame_dir):
+        os.mkdir(frame_dir)
+        BeWatch.overlays.dump_frames_at_retraction_time(metadata, frame_dir)
+## End frame dumping
+
+## Overlays
+# This needs to be rewritten for TrialFrameByTypes and TrialFrameAllTypes
+def make_overlay_image(session):
+    if db is None:
+        db = whiskvid.db.load_db()    
+
+    # Get behavior df
+    bfile_name = db.loc[session, 'bfile']
+    trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
+    frame_dir = db.loc[session, 'frames']
+
+    # Set up filename
+    db_changed = False
+    if pandas.isnull(db.loc[session, 'overlay_image']):
+        db.loc[session, 'overlay_image'] = whiskvid.db.OverlayImage.generate_name(
+            db.loc[session, 'session_dir'])
+        db_changed = True
+    overlay_image_name = db.loc[session, 'overlay_image']
+
+    make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix)
+    
+def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
+    # Make the various overlays
+    # Reload
+    trialnum2frame = BeWatch.overlays.load_frames_by_trial(
+        frame_dir, trial_matrix)
+
+    # Keep only those trials that we found images for
+    trial_matrix = trial_matrix.ix[sorted(trialnum2frame.keys())]
+
+    # Split on side, servo_pos, stim_number
+    res = []
+    gobj = trial_matrix.groupby(['rewside', 'servo_pos', 'stepper_pos'])
+    for (rewside, servo_pos, stim_number), subti in gobj:
+        meaned = np.mean([trialnum2frame[trialnum] for trialnum in subti.index],
+            axis=0)
+        res.append({'rewside': rewside, 'servo_pos': servo_pos, 
+            'stim_number': stim_number, 'meaned': meaned})
+    resdf = pandas.DataFrame.from_records(res)
+
+    C = BeWatch.overlays.make_overlay(resdf, ax, meth='all')
+    np.save(overlay_image_name, C)
+
+## End overlays
