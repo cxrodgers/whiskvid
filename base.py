@@ -868,8 +868,14 @@ def calculate_contacts_session(session, db=None, **kwargs):
     if db is None:
         db = whiskvid.db.load_db()
     row = db.ix[session]
+    
+    if pandas.isnull(row['tac']):
+        db.loc[session, 'tac'] = whiskvid.db.Contacts.generate_name(
+            row['session_dir'])
     tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
-        tac_filename=row['tac'], **kwargs)
+        tac_filename=db.loc[session, 'tac'], **kwargs)
+    
+    whiskvid.db.save_db(db)
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
@@ -915,7 +921,7 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     tips_and_contacts = resdf.join(contacts_df.set_index('index'))
     tips_and_contacts = tips_and_contacts[
         tips_and_contacts.closest_dist < contact_dist_thresh]
-    if tac_filename is not None:
+    if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
 

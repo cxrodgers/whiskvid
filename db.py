@@ -125,6 +125,12 @@ class Contacts(FileFinder):
     """Finds dataframe of contact times and locations"""
     glob_pattern = '*.tac'
 
+    @classmethod
+    def generate_name(self, dirname):
+        """Generates a contacts file name"""
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.tac')
+
 class Fit(FileFinder):
     """Finds fit from behavior to video"""
     glob_pattern = '*.fit'
