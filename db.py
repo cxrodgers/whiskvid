@@ -300,6 +300,14 @@ def rescan_db():
                 db.loc[session, 'bfile'] = bfile
                 db_changed = True
 
+        if pandas.isnull(db.loc[session, 'v_width']):
+            if not pandas.isnull(db.loc[session, 'vfile']):
+                width, height = my.video.get_video_aspect(
+                    db.loc[session, 'vfile'])
+                db.loc[session, 'v_width'] = width
+                db.loc[session, 'v_height'] = height
+                db_changed = True
+
     if db_changed:
         save_db(db)
 
@@ -396,8 +404,10 @@ def load_everything_from_session(session, db):
     row = db.ix[session]
 
     # Fit from previous file
-    b2v_fit = np.loadtxt(os.path.join(row['root_dir'], session, row['fit']))
-    v2b_fit = my.misc.invert_linear_poly(b2v_fit)
+    #~ b2v_fit = np.loadtxt(os.path.join(row['root_dir'], session, row['fit']))
+    #~ v2b_fit = my.misc.invert_linear_poly(b2v_fit)
+    b2v_fit = db.loc[session, ['fit_b2v0', 'fit_b2v1']]
+    v2b_fit = db.loc[session, ['fit_v2b0', 'fit_v2b1']]
 
     # Get behavior df
     trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(
@@ -412,8 +422,11 @@ def load_everything_from_session(session, db):
         row['root_dir'], session, row['edge_summary']))
         
     # Get overlays
-    overlay_image = np.load(os.path.join(row['root_dir'], session, 
-        row['overlay_image']))
+    if pandas.isnull(row['overlay_image']):
+        overlay_image = None
+    else:
+        overlay_image = np.load(os.path.join(row['root_dir'], session, 
+            row['overlay_image']))
         
 
     

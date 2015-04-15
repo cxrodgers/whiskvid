@@ -1138,7 +1138,8 @@ def plot_tac(session):
     v2b_fit = res['v2b_fit']
 
     # Get trial timings
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+    bfile = db.loc[session, 'bfile']
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(bfile)
 
     # Add trials
     tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
