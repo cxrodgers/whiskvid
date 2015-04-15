@@ -1183,7 +1183,8 @@ def plot_edge_summary(session):
 
     # Get behavior times
     trial_matrix = everything['trial_matrix']
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+        db.loc[session, 'bfile'])
     choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
     trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)
 
@@ -1198,8 +1199,8 @@ def plot_edge_summary(session):
     #axa[0].imshow(overlay_image)
     im = my.plot.imshow(typical_edges_hist2d, ax=axa[1],
         axis_call='image')
-    f.savefig(os.path.join(row['root_dir'], session, 
-        session + '.edges.overlays.png'))
+    #~ f.savefig(os.path.join(row['root_dir'], session, 
+        #~ session + '.edges.overlays.png'))
     plt.show()
 
 def video_edge_tac(session):
