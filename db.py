@@ -307,6 +307,11 @@ def rescan_db():
                 db.loc[session, 'v_width'] = width
                 db.loc[session, 'v_height'] = height
                 db_changed = True
+        
+        if pandas.isnull(db.loc[session, 'contact_video']):
+            db.loc[session, 'contact_video'] = ContactVideo.find(
+                db.loc[session, 'session_dir'])
+            db_changed = True
 
     if db_changed:
         save_db(db)

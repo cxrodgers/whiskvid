@@ -1203,13 +1203,15 @@ def plot_edge_summary(session):
         #~ session + '.edges.overlays.png'))
     plt.show()
 
-def video_edge_tac(session):
+def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
+    **kwargs):
     db = whiskvid.db.load_db()
     
     everything = whiskvid.db.load_everything_from_session(session, db)
     tac = everything['tac']   
     trial_matrix = everything['trial_matrix']
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(row['bfile'])
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+        db.loc[session, 'bfile'])
     choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
     trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)    
 
@@ -1223,10 +1225,15 @@ def video_edge_tac(session):
         db.loc[session, 'session_dir'])
     
     frame_triggers = trial_matrix['choice_bframe'].values
-    
+    if stop_after_trial is not None:
+        frame_triggers = frame_triggers[:stop_after_trial]
+
     whiskvid.output_video.dump_video_with_edge_and_tac(
         video_filename, typical_edges_hist2d, tac, everything['edge_a'],
-        output_filename, frame_triggers, trigger_dstart=-250, trigger_dstop=50,
-        d_temporal=2, d_spatial=1, post_contact_linger=75)    
+        output_filename, frame_triggers,
+        d_temporal=d_temporal, d_spatial=d_spatial, **kwargs)
+    
+    db.loc[session, 'contact_video'] = output_filename
+    whiskvid.db.save_db(db)
 
 ## end edge_summary + tac
