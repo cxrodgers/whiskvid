@@ -193,7 +193,8 @@ class ContactVideo(FileFinder):
 
     @classmethod
     def generate_name(self, dirname):
-        probable_session_name = os.path.split(dirname)[1]
+        probable_session_name = os.path.split(
+            os.path.abspath(dirname))[1]
         return os.path.join(dirname, 
             probable_session_name + '.edge_tac_overlay.mp4')        
 
@@ -285,7 +286,10 @@ def create_db_from_root_dir(root_dir=ROOT_DIR,
 def rescan_db():
     """Go through existing db and check for any new files
     
-    Currently only works for behavior file
+    Currently does a subset of what it should:
+    # Finds bfiles if None
+    # Sets v_width, v_height if None
+    # Finds contact_video if None, or if path doesn't exist
     """
     db = load_db()
     db_changed = False
@@ -308,7 +312,8 @@ def rescan_db():
                 db.loc[session, 'v_height'] = height
                 db_changed = True
         
-        if pandas.isnull(db.loc[session, 'contact_video']):
+        contact_video_fn = db.loc[session, 'contact_video']
+        if pandas.isnull(contact_video_fn) or not os.path.exists(contact_video_fn):
             db.loc[session, 'contact_video'] = ContactVideo.find(
                 db.loc[session, 'session_dir'])
             db_changed = True

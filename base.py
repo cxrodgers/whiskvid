@@ -1237,3 +1237,68 @@ def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     whiskvid.db.save_db(db)
 
 ## end edge_summary + tac
+
+## 
+# correlation with contact
+def plot_perf_vs_contacts(session):
+    db = whiskvid.db.load_db()
+    
+    # Load stuff
+    res = whiskvid.db.load_everything_from_session(session, db)
+    tac = res['tac']
+    trial_matrix = res['trial_matrix']
+    v2b_fit = res['v2b_fit']
+
+    # Get trial timings
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+        db.loc[session, 'bfile'])
+
+    # Add trials
+    tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
+        drop_late_contacts=True)
+    
+    # Add # of contacts to trial_matrix
+    trial_matrix['n_contacts'] = tac.groupby('trial').apply(len)
+    trial_matrix.loc[trial_matrix['n_contacts'].isnull(), 'n_contacts'] = 0
+
+    # Plot histogram of contacts vs hit or error
+    f, ax = plt.subplots()
+    
+    # Split on hits and errors and draw hist for each
+    tm_hit = my.pick_rows(trial_matrix, outcome='hit', isrnd=True)
+    tm_err = my.pick_rows(trial_matrix, outcome='error', isrnd=True)
+    ax.hist([
+        np.sqrt(tm_hit.n_contacts.values), 
+        np.sqrt(tm_err.n_contacts.values),
+        ])
+    ax.set_title(session)
+
+    # Plot perf vs some or none contacts
+    f, ax = plt.subplots()
+    
+    # Split on whether contacts occurred
+    tm_n_contacts = trial_matrix[
+        (trial_matrix.n_contacts == 0) &
+        trial_matrix.outcome.isin(['hit', 'error']) &
+        trial_matrix.isrnd]
+    tm_y_contacts = trial_matrix[
+        (trial_matrix.n_contacts > 0) &
+        trial_matrix.outcome.isin(['hit', 'error']) &
+        trial_matrix.isrnd]    
+    
+    perf_n_contacts = tm_n_contacts.outcome == 'hit'
+    perf_y_contacts = tm_y_contacts.outcome == 'hit'
+    data = [perf_n_contacts, perf_y_contacts]
+    
+    my.plot.vert_bar(ax=ax,
+        bar_lengths=map(np.mean, data),
+        bar_errs=map(np.std, data),
+        bar_colors=('b', 'r'),
+        bar_labels=('none', 'some'),
+        tick_labels_rotation=0,
+        )
+    ax.set_ylim((0, 1))
+    ax.set_title(session)
+
+
+##
