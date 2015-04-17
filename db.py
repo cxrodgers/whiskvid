@@ -137,6 +137,11 @@ class Contacts(FileFinder):
         """Generates a contacts file name"""
         probable_session_name = os.path.split(dirname)[1]
         return os.path.join(dirname, probable_session_name + '.tac')
+    
+    @classmethod
+    def load(self, filename):
+        """Loads from pandas pickle"""
+        return pandas.read_pickle(filename)
 
 class Fit(FileFinder):
     """Finds fit from behavior to video"""

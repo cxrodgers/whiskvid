@@ -1300,5 +1300,78 @@ def plot_perf_vs_contacts(session):
     ax.set_ylim((0, 1))
     ax.set_title(session)
 
+def logreg_perf_vs_contacts(session):
+    trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(
+        db.loc[session, 'bfile'])
+    tac = whiskvid.db.Contacts.load(db.loc[session, 'tac'])
+    v2b_fit = db.loc[session, ['fit_v2b0', 'fit_v2b1']]
+    b2v_fit = db.loc[session, ['fit_b2v0', 'fit_b2v1']]
+    
+    if np.any(pandas.isnull(v2b_fit.values)):
+        continue
+
+    # Get trial timings
+    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+        db.loc[session, 'bfile'])
+    trial_matrix['vchoice_time'] = np.polyval(b2v_fit, trial_matrix['choice_time'])
+
+    # Add trials
+    tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
+        drop_late_contacts=True)
+
+    # Add # of contacts to trial_matrix
+    trial_matrix['n_contacts'] = tac.groupby('trial').apply(len)
+    trial_matrix.loc[trial_matrix['n_contacts'].isnull(), 'n_contacts'] = 0
+
+    # Drop the ones before video started
+    trial_matrix = trial_matrix[trial_matrix.vchoice_time > 0]
+
+    # Choose the random hits
+    lr_tm = my.pick_rows(trial_matrix, outcome=['hit', 'error'], isrnd=True)
+
+    # Choose the regularizations
+    C_l = [1, .1, .01]
+
+    # Setup input / output
+    input = lr_tm['n_contacts'].values[:, None]
+    output = (lr_tm['outcome'].values == 'hit').astype(np.int)
+
+    # Transform the input
+    input = np.sqrt(input)
+
+    # Values for plotting the decision function 
+    plotl = np.linspace(0, input.max(), 100)
+
+    # Bins for actual data
+    bins = np.sqrt([0, 1, 4, 8, 16, 32, 64, 128])
+    #~ bins = np.linspace(0, input.max(), 4)
+    bin_centers = bins[:-1] + 0.5
+
+    # Extract perf of each bin of trials based on # of contacts
+    binned_input = np.searchsorted(bins, input.flatten())
+    bin_mean_l, bin_err_l = [], []
+    for nbin, bin in enumerate(bins):
+        mask = binned_input == nbin
+        if np.sum(mask) == 0:
+            bin_mean_l.append(np.nan)
+            bin_err_l.append(np.nan)
+        else:
+            hits = output[mask]
+            bin_mean_l.append(np.mean(hits))
+            bin_err_l.append(np.std(hits))
+        
+
+    f, axa = plt.subplots(1, len(C_l), figsize=(12, 4))
+    for C, ax in zip(C_l, axa):
+        lr = scikits.learn.linear_model.LogisticRegression(C=C)
+        lr.fit(input, output)#, class_weight='auto')
+        ax.plot(plotl, lr.predict_proba(plotl[:, None])[:, 1])
+        ax.plot(plotl, np.ones_like(plotl) * 0.5)
+        ax.set_ylim((0, 1))
+        
+        # plot data
+        ax.errorbar(x=bins, y=bin_mean_l, yerr=bin_err_l)
+    f.suptitle(session)
+    plt.show()    
 
 ##
