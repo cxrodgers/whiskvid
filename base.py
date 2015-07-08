@@ -1112,13 +1112,21 @@ def make_overlay_image(session):
 
     # Set up filename
     db_changed = False
-    if pandas.isnull(db.loc[session, 'overlay_image']):
-        db.loc[session, 'overlay_image'] = whiskvid.db.OverlayImage.generate_name(
+    if pandas.isnull(db.loc[session, whiskvid.db.TrialFramesAllTypes.db_column]):
+        db.loc[session, whiskvid.db.TrialFramesAllTypes.db_column] = \
+            whiskvid.db.TrialFramesAllTypes.generate_name(
             db.loc[session, 'session_dir'])
         db_changed = True
-    overlay_image_name = db.loc[session, 'overlay_image']
+    overlay_image_name = db.loc[session, 
+        whiskvid.db.TrialFramesAllTypes.db_column]
 
     make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix)
+    
+    # Save db
+    if db_changed:
+        whiskvid.db.save_db(db)     
+    else:
+        print "no changes made to TrialFramesAllTypes in", session    
     
 def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
     """Make overlays of shapes to show positioning.

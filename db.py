@@ -181,12 +181,43 @@ class EdgesSummary(FileFinder):
         return pandas.read_pickle(filename)
 
 class TrialFramesByType(FileFinder):
-    """Finds dataframe of trial frames, meaned by type"""
+    """Finds dataframe of trial frames, meaned by type
+    
+    This is a pandas dataframe with a different row for each 
+    servo_pos * stim_number. The column 'meaned' is an MxN intensity
+    array, meaned over all trials of that type.
+    """
     glob_pattern = '*.overlays.df'
+    db_column = 'overlays'
+
+    @classmethod
+    def generate_name(self, dirname):
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + 
+            '.overlays.df')
+    
+    @classmethod
+    def load(self, filename):
+        return pandas.read_pickle(filename)    
 
 class TrialFramesAllTypes(FileFinder):
-    """Finds image array of all overlaid trial type frames"""
+    """Finds image array of all overlaid trial type frames
+    
+    This is an MxNx3 array that was constructed by adding together the
+    meaned frames in TrialFramesByType.
+    """
     glob_pattern = '*.all_overlays.npy'
+    db_column = 'overlay_image'
+    
+    @classmethod
+    def generate_name(self, dirname):
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + 
+            '.all_overlays.npy')
+    
+    @classmethod
+    def load(self, filename):
+        return np.load(filename)
 
 class BehaviorLog(FileFinder):
     """Finds log of behavior for session"""
