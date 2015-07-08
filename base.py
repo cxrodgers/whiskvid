@@ -1,4 +1,21 @@
-"""Functions for analyzing whiski data"""
+"""Functions for analyzing whiski data
+
+* Wrappers around whiski loading functions
+* Various methods for extracting angle information from whiski data
+* Methods for processing video to extract shape contours
+* HDF5 file format stuff
+* The high-speed video analysis pipeline. Tried to have a generic system
+  for each step in the pipeline. So, for instance there is:
+    whiskvid.base.edge_frames_manual_params
+        To set the manual parameters necessary for this step
+    whiskvid.base.edge_frames_manual_params_db
+        Same as above but use the db defined in whiskvid.db
+    whiskvid.base.edge_frames_nodb
+        Run the step without relying on the db
+    whiskvid.base.edge_frames
+        Same as above but save to db
+* Plotting stuff, basically part of the pipeline
+"""
 import traj, trace
 import numpy as np, pandas
 import os
@@ -1084,6 +1101,7 @@ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
 # This needs to be rewritten for TrialFrameByTypes and TrialFrameAllTypes
 # Actually get this from 20150401_tac_analyze
 def make_overlay_image(session):
+    """Generates a 3d overlay array using db metadata for session"""
     if db is None:
         db = whiskvid.db.load_db()    
 
@@ -1103,6 +1121,15 @@ def make_overlay_image(session):
     make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix)
     
 def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
+    """Make overlays of shapes to show positioning.
+    
+    Wrapper over the methods in BeWatch.overlays
+    
+    overlay_image_name : where to save the 3d color array of the overlays
+        Not an image!
+    frame_dir : where the frames are
+    trial_matrix
+    """
     # Make the various overlays
     # Reload
     trialnum2frame = BeWatch.overlays.load_frames_by_trial(
@@ -1129,6 +1156,9 @@ def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
 
 ## edge_summary + tac
 def plot_tac(session):
+    """Plot the contact locations based on which trial type or response
+    
+    """
     db = whiskvid.db.load_db()
 
     # Load stuff
@@ -1174,6 +1204,7 @@ def plot_tac(session):
     plt.show()
 
 def plot_edge_summary(session):
+    """Plot the 2d histogram of edge locations"""
     db = whiskvid.db.load_db()
     
     # Load overlay image and edge_a
@@ -1205,6 +1236,7 @@ def plot_edge_summary(session):
 
 def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     **kwargs):
+    """Make a video with the overlaid edging and contact locations"""
     db = whiskvid.db.load_db()
     
     everything = whiskvid.db.load_everything_from_session(session, db)
@@ -1308,7 +1340,7 @@ def logreg_perf_vs_contacts(session):
     b2v_fit = db.loc[session, ['fit_b2v0', 'fit_b2v1']]
     
     if np.any(pandas.isnull(v2b_fit.values)):
-        continue
+        1/0
 
     # Get trial timings
     trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
