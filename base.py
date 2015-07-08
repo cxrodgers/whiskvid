@@ -1060,14 +1060,13 @@ def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
 ## End edge summary dumping
 
 ## Frame dumping
-# Untested
 def dump_frames(session, db=None):
     """Calls `dump_frames_nodb` on `session`"""
     if db is None:
         db = whiskvid.db.load_db()    
 
     # Get behavior df
-    bfile_name = db.loc[session, 'bfile']
+    bfilename = db.loc[session, 'bfile']
     b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
     video_file = db.loc[session, 'vfile']
     
@@ -1086,7 +1085,10 @@ def dump_frames(session, db=None):
         whiskvid.db.save_db(db)
 
 def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
-    """Dump frames"""
+    """Dump frames at servo retraction time
+    
+    Wrapper around BeWatch.overlays.dump_frames_at_retraction_time
+    """
     # overlays
     duration = my.video.get_video_duration(video_file)
     metadata = {'filename': bfilename, 'fit0': b2v_fit[0], 'fit1': b2v_fit[1],
@@ -1095,13 +1097,17 @@ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
     if not os.path.exists(frame_dir):
         os.mkdir(frame_dir)
         BeWatch.overlays.dump_frames_at_retraction_time(metadata, frame_dir)
+    else:
+        print "not dumping frames, %s already exists" % frame_dir
 ## End frame dumping
 
 ## Overlays
-# This needs to be rewritten for TrialFrameByTypes and TrialFrameAllTypes
-# Actually get this from 20150401_tac_analyze
-def make_overlay_image(session):
-    """Generates a 3d overlay array using db metadata for session"""
+def make_overlay_image(session, db=None):
+    """Generates trial_frames_by_type and trial_frames_all_types for session
+    
+    This is a wrapper around make_overlay_image_nodb that extracts metadata
+    and works with the db.
+    """
     if db is None:
         db = whiskvid.db.load_db()    
 
@@ -1110,33 +1116,53 @@ def make_overlay_image(session):
     trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
     frame_dir = db.loc[session, 'frames']
 
-    # Set up filename
-    db_changed = False
-    if pandas.isnull(db.loc[session, whiskvid.db.TrialFramesAllTypes.db_column]):
-        db.loc[session, whiskvid.db.TrialFramesAllTypes.db_column] = \
-            whiskvid.db.TrialFramesAllTypes.generate_name(
-            db.loc[session, 'session_dir'])
-        db_changed = True
-    overlay_image_name = db.loc[session, 
-        whiskvid.db.TrialFramesAllTypes.db_column]
+    # Error check
+    # Should this be a cascading call to dump_frames?
+    if pandas.isnull(frame_dir) or not os.path.exists(frame_dir):
+        raise ValueError("frames must be dumped before making overlays")
 
-    make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix)
+    def get_or_generate_filename(file_class):
+        db_changed = False
+        if pandas.isnull(db.loc[session, file_class.db_column]):
+            db.loc[session, file_class.db_column] = \
+                file_class.generate_name(db.loc[session, 'session_dir'])
+            db_changed = True
+        filename = db.loc[session, file_class.db_column]
+        
+        return filename, db_changed
+
+    # Set up filenames for each
+    overlay_image_name, db_changed1 = get_or_generate_filename(
+        whiskvid.db.TrialFramesAllTypes)
+    trial_frames_by_type_filename, db_changed2 = get_or_generate_filename(
+        whiskvid.db.TrialFramesByType)
+
+    make_overlay_image_nodb(trial_frames_by_type_filename,
+        overlay_image_name, frame_dir, trial_matrix)
     
     # Save db
-    if db_changed:
+    if db_changed1 or db_changed2:
         whiskvid.db.save_db(db)     
     else:
-        print "no changes made to TrialFramesAllTypes in", session    
+        print "no changes made to overlay filenames in db for", session    
     
-def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
+def make_overlay_image_nodb(trial_frames_by_type_filename,
+    overlay_image_name, frame_dir, trial_matrix):
     """Make overlays of shapes to show positioning.
     
     Wrapper over the methods in BeWatch.overlays
     
+    trial_frames_by_type_filename : where to save the pandas dataframe
+        containing the meaned image over all trials of each type
     overlay_image_name : where to save the 3d color array of the overlays
-        Not an image!
+        This is the sum of all the types in trial_frames_by_type, colorized
+        by rewarded side.
     frame_dir : where the frames are
-    trial_matrix
+    trial_matrix : the trial matrix
+    
+    In addition to saving them to disk, this also returns:
+        trial_frames_by_type (DataFrame), trial_frames_all_types (array)
+    
     """
     # Make the various overlays
     # Reload
@@ -1146,6 +1172,7 @@ def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
     # Keep only those trials that we found images for
     trial_matrix = trial_matrix.ix[sorted(trialnum2frame.keys())]
 
+    # Generate the trial_frames_by_type data frame
     # Split on side, servo_pos, stim_number
     res = []
     gobj = trial_matrix.groupby(['rewside', 'servo_pos', 'stepper_pos'])
@@ -1156,9 +1183,15 @@ def make_overlay_image_nodb(overlay_image_name, frame_dir, trial_matrix):
             'stim_number': stim_number, 'meaned': meaned})
     resdf = pandas.DataFrame.from_records(res)
 
-    C = BeWatch.overlays.make_overlay(resdf, ax, meth='all')
-    np.save(overlay_image_name, C)
+    # Save trial_frames_by_type
+    whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename, resdf)
 
+    # Make the trial_frames_all_types and save it
+    f, ax = plt.subplots(figsize=(6.4, 6.2))
+    C = BeWatch.overlays.make_overlay(resdf, ax, meth='all')
+    whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
+    
+    return resdf, C
 ## End overlays
 
 

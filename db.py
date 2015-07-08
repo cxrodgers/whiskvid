@@ -167,6 +167,10 @@ class TrialFramesDir(FileFinder):
     """Finds directory containing frames at time of retraction"""
     glob_pattern = '*frames*'
 
+    @classmethod
+    def generate_name(self, dirname):
+        return os.path.join(dirname, 'frames')
+
 class EdgesSummary(FileFinder):
     """Finds pickle of histogrammed edges for each trial type"""
     glob_pattern = '*.edge_summary.pickle'
@@ -174,7 +178,8 @@ class EdgesSummary(FileFinder):
     @classmethod
     def generate_name(self, dirname):
         probable_session_name = os.path.split(dirname)[1]
-        return os.path.join(dirname, probable_session_name + '.edge_summary.pickle')
+        return os.path.join(dirname, probable_session_name + 
+            '.edge_summary.pickle')
     
     @classmethod
     def load(self, filename):
@@ -199,6 +204,10 @@ class TrialFramesByType(FileFinder):
     @classmethod
     def load(self, filename):
         return pandas.read_pickle(filename)    
+    
+    @classmethod
+    def save(self, filename, data):
+        data.to_pickle(filename)
 
 class TrialFramesAllTypes(FileFinder):
     """Finds image array of all overlaid trial type frames
@@ -218,6 +227,10 @@ class TrialFramesAllTypes(FileFinder):
     @classmethod
     def load(self, filename):
         return np.load(filename)
+    
+    @classmethod
+    def save(self, filename, data):
+        np.save(filename, data)
 
 class BehaviorLog(FileFinder):
     """Finds log of behavior for session"""
