@@ -1107,6 +1107,8 @@ def make_overlay_image(session, db=None):
     
     This is a wrapper around make_overlay_image_nodb that extracts metadata
     and works with the db.
+    
+    Returns: trial_frames_by_type, trial_frames_all_types
     """
     if db is None:
         db = whiskvid.db.load_db()    
@@ -1137,7 +1139,9 @@ def make_overlay_image(session, db=None):
     trial_frames_by_type_filename, db_changed2 = get_or_generate_filename(
         whiskvid.db.TrialFramesByType)
 
-    make_overlay_image_nodb(trial_frames_by_type_filename,
+    # Call make_overlay_image_nodb
+    trial_frames_by_type, trial_frames_all_types = \
+        make_overlay_image_nodb(trial_frames_by_type_filename,
         overlay_image_name, frame_dir, trial_matrix)
     
     # Save db
@@ -1146,8 +1150,10 @@ def make_overlay_image(session, db=None):
     else:
         print "no changes made to overlay filenames in db for", session    
     
+    return trial_frames_by_type, trial_frames_all_types
+    
 def make_overlay_image_nodb(trial_frames_by_type_filename,
-    overlay_image_name, frame_dir, trial_matrix):
+    overlay_image_name, frame_dir, trial_matrix, ax=None):
     """Make overlays of shapes to show positioning.
     
     Wrapper over the methods in BeWatch.overlays
@@ -1186,8 +1192,11 @@ def make_overlay_image_nodb(trial_frames_by_type_filename,
     # Save trial_frames_by_type
     whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename, resdf)
 
+    # Make figure window
+    if ax is None:
+        f, ax = plt.subplots(figsize=(6.4, 6.2))
+
     # Make the trial_frames_all_types and save it
-    f, ax = plt.subplots(figsize=(6.4, 6.2))
     C = BeWatch.overlays.make_overlay(resdf, ax, meth='all')
     whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
     
@@ -1196,9 +1205,14 @@ def make_overlay_image_nodb(trial_frames_by_type_filename,
 
 
 ## edge_summary + tac
-def plot_tac(session):
-    """Plot the contact locations based on which trial type or response
+def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
+    """Plot the contact locations based on which trial type or response.
     
+    whiskvid.db.add_trials_to_tac is used to connect the contact times
+    to the behavioral data.
+    
+    drop_late_contacts : passed to add_trials_to_tac, determines whether
+        post-choice contacts are included
     """
     db = whiskvid.db.load_db()
 
@@ -1214,35 +1228,41 @@ def plot_tac(session):
 
     # Add trials
     tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
-        drop_late_contacts=True)
+        drop_late_contacts=drop_late_contacts)
 
-    # Plot tac vs rewside
-    rewside2color = {'left': 'b', 'right': 'r'}
-    f, ax = plt.subplots()
-    gobj = my.pick_rows(tac, 
-        choice=['left', 'right'], outcome='hit', isrnd=True).groupby('rewside')
-    for rewside, subtac in gobj:
-        ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-            color=rewside2color[rewside], mec='none', alpha=1)
-        ax.set_xlim((0, db.loc[session, 'v_width']))
-        ax.set_ylim((db.loc[session, 'v_height'], 0))
-        ax.set_title(session)
-    my.plot.rescue_tick(f=f, x=4, y=4)
-
-    # Plot tac vs choice
-    choice2color = {'left': 'b', 'right': 'r'}
-    f, ax = plt.subplots()
-    gobj = my.pick_rows(tac, 
-        choice=['left', 'right'], isrnd=True).groupby('choice')
-    for rewside, subtac in gobj:
-        ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-            color=rewside2color[rewside], mec='none', alpha=1)
-        ax.set_xlim((0, db.loc[session, 'v_width']))
-        ax.set_ylim((db.loc[session, 'v_height'], 0))
-        ax.set_title(session)
-    my.plot.rescue_tick(f=f, x=4, y=4)
+    if ax is None:
+        f, ax = plt.subplots()
+    
+    if versus == 'rewside':
+        # Plot tac vs rewside
+        rewside2color = {'left': 'b', 'right': 'r'}
+        gobj = my.pick_rows(tac, 
+            choice=['left', 'right'], outcome='hit', isrnd=True).groupby('rewside')
+        for rewside, subtac in gobj:
+            ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
+                color=rewside2color[rewside], mec='none', alpha=1)
+            ax.set_xlim((0, db.loc[session, 'v_width']))
+            ax.set_ylim((db.loc[session, 'v_height'], 0))
+            ax.set_title(session)
+        my.plot.rescue_tick(f=f, x=4, y=4)
+    elif versus == 'choice':
+        # Plot tac vs choice
+        choice2color = {'left': 'b', 'right': 'r'}
+        gobj = my.pick_rows(tac, 
+            choice=['left', 'right'], isrnd=True).groupby('choice')
+        for rewside, subtac in gobj:
+            ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
+                color=rewside2color[rewside], mec='none', alpha=1)
+            ax.set_xlim((0, db.loc[session, 'v_width']))
+            ax.set_ylim((db.loc[session, 'v_height'], 0))
+            ax.set_title(session)
+        my.plot.rescue_tick(f=f, x=4, y=4)
+    else:
+        raise ValueError("bad versus: %s" % versus)
 
     plt.show()
+    
+    return ax
 
 def plot_edge_summary(session):
     """Plot the 2d histogram of edge locations"""
