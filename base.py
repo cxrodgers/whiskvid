@@ -1102,7 +1102,7 @@ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
 ## End frame dumping
 
 ## Overlays
-def make_overlay_image(session, db=None):
+def make_overlay_image(session, db=None, ax=None):
     """Generates trial_frames_by_type and trial_frames_all_types for session
     
     This is a wrapper around make_overlay_image_nodb that extracts metadata
@@ -1142,7 +1142,7 @@ def make_overlay_image(session, db=None):
     # Call make_overlay_image_nodb
     trial_frames_by_type, trial_frames_all_types = \
         make_overlay_image_nodb(trial_frames_by_type_filename,
-        overlay_image_name, frame_dir, trial_matrix)
+        overlay_image_name, frame_dir, trial_matrix, ax=ax)
     
     # Save db
     if db_changed1 or db_changed2:
@@ -1205,14 +1205,11 @@ def make_overlay_image_nodb(trial_frames_by_type_filename,
 
 
 ## edge_summary + tac
-def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
-    """Plot the contact locations based on which trial type or response.
+def get_tac(session, min_t=None, max_t=None):
+    """Wrapper to load tac, add behavioral information and trial times
     
-    whiskvid.db.add_trials_to_tac is used to connect the contact times
-    to the behavioral data.
-    
-    drop_late_contacts : passed to add_trials_to_tac, determines whether
-        post-choice contacts are included
+    min_t, max_t : if not None, then drops rows that are not in this time
+        range relative to the choice time on each trial
     """
     db = whiskvid.db.load_db()
 
@@ -1228,7 +1225,26 @@ def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
 
     # Add trials
     tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
-        drop_late_contacts=drop_late_contacts)
+        drop_late_contacts=False)
+    
+    if min_t is not None:
+        tac = tac[tac.t_wrt_choice >= min_t]
+    if max_t is not None:
+        tac = tac[tac.t_wrt_choice < max_t]
+    
+    return tac
+
+def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
+    alpha=1):
+    """Plot the contact locations based on which trial type or response.
+    
+    whiskvid.db.add_trials_to_tac is used to connect the contact times
+    to the behavioral data.
+    
+    t_min and t_max are passed to tac
+    """
+    db = whiskvid.db.load_db()
+    tac = get_tac(session, min_t=min_t, max_t=max_t)
 
     if ax is None:
         f, ax = plt.subplots()
@@ -1240,11 +1256,10 @@ def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
             choice=['left', 'right'], outcome='hit', isrnd=True).groupby('rewside')
         for rewside, subtac in gobj:
             ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-                color=rewside2color[rewside], mec='none', alpha=1)
+                color=rewside2color[rewside], mec='none', alpha=alpha)
             ax.set_xlim((0, db.loc[session, 'v_width']))
             ax.set_ylim((db.loc[session, 'v_height'], 0))
-            ax.set_title(session)
-        my.plot.rescue_tick(f=f, x=4, y=4)
+        my.plot.rescue_tick(ax=ax, x=4, y=4)
     elif versus == 'choice':
         # Plot tac vs choice
         choice2color = {'left': 'b', 'right': 'r'}
@@ -1252,11 +1267,10 @@ def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
             choice=['left', 'right'], isrnd=True).groupby('choice')
         for rewside, subtac in gobj:
             ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-                color=rewside2color[rewside], mec='none', alpha=1)
+                color=rewside2color[rewside], mec='none', alpha=alpha)
             ax.set_xlim((0, db.loc[session, 'v_width']))
             ax.set_ylim((db.loc[session, 'v_height'], 0))
-            ax.set_title(session)
-        my.plot.rescue_tick(f=f, x=4, y=4)
+        my.plot.rescue_tick(ax=ax, x=4, y=4)
     else:
         raise ValueError("bad versus: %s" % versus)
 
@@ -1264,14 +1278,19 @@ def plot_tac(session, ax=None, versus='rewside', drop_late_contacts=True):
     
     return ax
 
-def plot_edge_summary(session):
-    """Plot the 2d histogram of edge locations"""
+def plot_edge_summary(session, ax=None, **kwargs):
+    """Plot the 2d histogram of edge locations
+    
+    kwargs are passed to imshow, eg clim or alpha
+    The image is stretched to video width and height, regardless of
+    histogram edges.
+    
+    Returns: typical_edges_hist2d, typical_edges_row, typical_edges_col
+    """
     db = whiskvid.db.load_db()
     
     # Load overlay image and edge_a
     everything = whiskvid.db.load_everything_from_session(session, db)
-    tac = everything['tac']
-    overlay_image = everything['overlay_image']
 
     # Get behavior times
     trial_matrix = everything['trial_matrix']
@@ -1286,14 +1305,16 @@ def plot_edge_summary(session):
     typical_edges_col = everything['edge_summary']['col_edges']
 
     # Plot H_l
-    f, axa = plt.subplots(1, 2)
-    f.suptitle(session)
-    #axa[0].imshow(overlay_image)
-    im = my.plot.imshow(typical_edges_hist2d, ax=axa[1],
-        axis_call='image')
+    if ax is None:
+        f, ax = plt.subplots()
+    im = my.plot.imshow(typical_edges_hist2d, ax=ax,
+        xd_range=(0, db.loc[session, 'v_width']),
+        yd_range=(0, db.loc[session, 'v_height']),
+        axis_call='image', cmap=plt.cm.gray_r, **kwargs)
     #~ f.savefig(os.path.join(row['root_dir'], session, 
         #~ session + '.edges.overlays.png'))
-    plt.show()
+    
+    return typical_edges_hist2d, typical_edges_row, typical_edges_col
 
 def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     **kwargs):
