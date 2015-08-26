@@ -838,6 +838,17 @@ def get_whisker_ends_hdf5(hdf5_file=None, side=None,
         new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
         new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
         summary = new_summary
+    elif side == 'top':
+        # Identify which are backwards (0 at the top (?))
+        switch_mask = summary['tip_y'] < summary['fol_y']
+        
+        # Switch those rows
+        new_summary = summary.copy()
+        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
+        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
+        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
+        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
+        summary = new_summary        
     elif side is None:
         pass
     else:
@@ -1071,6 +1082,22 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
+
+def purge_tac(session, db=None):
+    """Delete the tac"""
+    # Get the filename
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    tac_file = db.loc[session, 'tac']
+    
+    # Try to purge it
+    if pandas.isnull(tac_file):
+        print "no tac file to purge"
+    elif not os.path.exists(tac_file):
+        print "cannot find tac file to purge: %r" % tac_file
+    else:
+        os.remove(tac_file)
 
 ## End calculating contacts
 
