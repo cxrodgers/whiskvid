@@ -513,6 +513,11 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     lumthresh_int = int(lumthresh_s)
     res2['edge_lumthresh'] = lumthresh_int
 
+    # Get the face side
+    side_s = raw_input(
+        "Enter face side (eg, 'top', 'left' but without quotes): ")
+    res2['side'] = side_s
+
     #~ ## replot figure with params
     #~ f, axa = plt.subplots(3, 3)
     #~ for good_frame, ax in zip(frames_a[idxs[::100]], axa.flatten()):
