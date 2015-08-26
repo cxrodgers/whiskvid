@@ -309,9 +309,9 @@ def get_left_edge(object_mask):
 def get_bottom_edge(object_mask):
     """Return the bottom edge of the object.
     
-    Currently, for each row, we take the left most nonzero value. We
+    Currently, for each column, we take the bottom most nonzero value. We
     return (row, col) for each such pixel. However, this doesn't work for
-    horizontal parts of the edge.
+    vertical parts of the edge.
     """
     contour = []
     for ncol, col in enumerate(object_mask.T):
@@ -393,7 +393,8 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
 
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
-    return_frames_instead=False, meth='largest_in_roi', split_iters=10):
+    return_frames_instead=False, meth='largest_in_roi', split_iters=10,
+    side='left'):
     """Top-level function for extracting edges from video
     
     Uses process_chunks_of_video and find_edge_of_shape
@@ -402,15 +403,25 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     
     return_frames_instead : for debugging. If True, return the raw frames
         instead of the edges
+    side : Must be either 'left' or 'top'
+        If 'left', then uses get_bottom_edge
+        If 'top', then uses get_left_edge
     
     Returns: edge_a
     """
+    # Set the edge_getter using the side
+    if side == 'left':
+        edge_getter = get_bottom_edge
+    elif side == 'top':
+        edge_getter = get_left_edge
+    else:
+        raise ValueError("side must be left or top, instead of %r" % side)
     
     # Helper function to pass to process_chunks_of_video
     def mapfunc(frame):
         """Gets the edge from each frame"""
         edge = find_edge_of_shape(frame, lum_threshold=50,
-            roi_x=roi_x, roi_y=roi_y, edge_getter=get_bottom_edge,
+            roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
             meth=meth, split_iters=split_iters)
         if edge is None:
             return None
@@ -542,12 +553,22 @@ def edge_frames(session, db=None, **kwargs):
         output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
         db.loc[session, 'edge'] = output_file
     
+    # A better default for side
+    if 'side' in kwargs:
+        side = kwargs.pop('side')
+    elif pandas.isnull(row['side']):
+        print "warning: side is null, using left"
+        side = 'left'
+    else:
+        side = row['side']
+    
     edge_frames_nodb(row['vfile'], db.loc[session, 'edge'],
         lum_threshold=row['edge_lumthresh'],
         edge_roi_x0=row['edge_roi_x0'], 
         edge_roi_x1=row['edge_roi_x1'], 
         edge_roi_y0=row['edge_roi_y0'], 
         edge_roi_y1=row['edge_roi_y1'],
+        side=side,
         **kwargs)
 
     # Save
@@ -556,7 +577,7 @@ def edge_frames(session, db=None, **kwargs):
 def edge_frames_nodb(video_file, edge_file, 
     lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
     split_iters=13, n_frames=np.inf, 
-    stride=100, **kwargs):
+    stride=100, side='left', **kwargs):
     """Edge all frames and save to edge_file. Also debug plot"""
     ## Now calculate the edges
     width, height = my.video.get_video_aspect(video_file)
@@ -567,7 +588,7 @@ def edge_frames_nodb(video_file, edge_file,
         lum_threshold=lum_threshold, 
         roi_x=(edge_roi_x0, edge_roi_x1), roi_y=(edge_roi_y0, edge_roi_y1),
         return_frames_instead=False,
-        meth='largest_in_roi', split_iters=split_iters, **kwargs)
+        meth='largest_in_roi', split_iters=split_iters, side=side, **kwargs)
 
     # Save
     np.save(edge_file, edge_a)
