@@ -330,7 +330,7 @@ def plot_all_objects(objects, nobjects):
 
 def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     roi_y=(0, 480), size_threshold=10000, edge_getter=get_bottom_edge,
-    meth='largest_in_roi', split_iters=10):
+    meth='largest_in_roi', split_iters=10, debug=False):
     """Find the left edge of the shape in frame.
     
     This is a wrapper around the other utility functions
@@ -341,6 +341,8 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     4. Finds the left edge of this spot
     
     meth: largest_with_centroid_in_roi, largest_in_roi
+    
+    If debug: returns binframe, best_object, edge
     
     Returns: bottom edge, as sequence of (y, x) (or row, col) pairs
         If no acceptable object is found, returns None.
@@ -388,8 +390,11 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     # Get the contour of the object
     best_object = objects == best_id
     edge = edge_getter(best_object)
-    
-    return edge
+
+    if debug:
+        return binframe, best_object, edge
+    else:
+        return edge
 
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
@@ -455,6 +460,11 @@ def plot_edge_subset(edge_a, stride=200, xlim=(0, 640), ylim=(480, 0)):
 
 def edge_frames_manual_params_db(session, interactive=True, **kwargs):
     """Interactively set lum thresh and roi for edging
+    
+    This ROI will be used to identify which of the dark shapes in the object
+    is the stimulus. Typically, we choose the largest shape that has any
+    part of itself in the ROI. Thus, choose the ROI such that the face is never
+    included, but some part of the shape is always included.
     
     Requires: row['vfile'] to exist
     Sets: edge_roi_x, edge_roi_y, edge_lumthresh
@@ -662,6 +672,34 @@ def purge_edge_frames(session, db=None):
     else:
         os.remove(edge_file)
     
+def edge_frames_debug_plot(session):
+    """This is a helper function for debugging edging (not finished)."""
+    # Extract raw frames with edges
+    frames, edge_a = whiskvid.edge_frames(
+        session, verbose=True, debug=True)    
+    
+    # Plot them
+    f, axa = plt.subplots(5, 5)
+    nax = 0
+    stride = 10
+    for nframe, (frame, edge) in enumerate(zip(frames[::stride], edge_a[::stride])):
+        #~ # This is a good way to test
+        #~ binframe, best_object, edge = whiskvid.find_edge_of_shape(frame, 
+            #~ lum_threshold=50, roi_x=(150, 390), roi_y=(150, 390), 
+            #~ edge_getter=whiskvid.base.get_left_edge, debug=True)
+        
+        if edge is None:
+            continue
+        ax = axa.flatten()[nax]
+        nax = nax + 1
+        if nax == len(axa.flatten()):
+            break
+        v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
+        im2 = my.plot.imshow(frame, ax=ax, 
+            axis_call='image', cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+        ax.plot(edge[:, 1], edge[:, 0], 'g-')
+        ax.set_title("frame %d" % nframe)
+        plt.show()    
 
 ## End of functions for extracting objects from video
 
