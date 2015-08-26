@@ -333,12 +333,17 @@ def create_db_from_root_dir(root_dir=ROOT_DIR,
     return df
 
 def rescan_db():
-    """Go through existing db and check for any new files
+    """Sort of an 'update_db' that auto-completes certain fields.
     
-    Currently does a subset of what it should:
+    Shouldn't overwrite any field unless it is null, or perhaps if it
+    is a filename that doesn't exist.
+    
+    Here's what it currently does. Need to add more.
     # Finds bfiles if None
     # Sets v_width, v_height if None
     # Finds contact_video if None, or if path doesn't exist
+    # Sets date_s based to be the first 6 chars of index
+    
     """
     db = load_db()
     db_changed = False
@@ -365,6 +370,11 @@ def rescan_db():
         if pandas.isnull(contact_video_fn) or not os.path.exists(contact_video_fn):
             db.loc[session, 'contact_video'] = ContactVideo.find(
                 db.loc[session, 'session_dir'])
+            db_changed = True
+        
+        if pandas.isnull(db.loc[session, 'date_s']):
+            print "setting date_s for %s to %s" % (session, session[:6])
+            db.loc[session, 'date_s'] = session[:6]
             db_changed = True
 
     if db_changed:
