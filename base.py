@@ -542,8 +542,11 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     return res2
 
 
-def edge_frames(session, db=None, **kwargs):
-    """Edges the frames and updates db"""
+def edge_frames(session, db=None, debug=False, **kwargs):
+    """Edges the frames and updates db
+    
+    If debug: returns frames, edge_a and does not update db
+    """
     if db is None:
         db = whiskvid.db.load_db()
     row = db.ix[session]
@@ -562,42 +565,103 @@ def edge_frames(session, db=None, **kwargs):
     else:
         side = row['side']
     
-    edge_frames_nodb(row['vfile'], db.loc[session, 'edge'],
-        lum_threshold=row['edge_lumthresh'],
-        edge_roi_x0=row['edge_roi_x0'], 
-        edge_roi_x1=row['edge_roi_x1'], 
-        edge_roi_y0=row['edge_roi_y0'], 
-        edge_roi_y1=row['edge_roi_y1'],
-        side=side,
-        **kwargs)
+    # Form the params
+    kwargs = kwargs.copy()
+    for kwarg in ['edge_roi_x0', 'edge_roi_x1', 
+        'edge_roi_y0', 'edge_roi_y1']:
+        kwargs[kwarg] = row[kwarg]
+    kwargs['lum_threshold'] = row['edge_lumthresh']
+    
+    # Depends on debug
+    if debug:
+        frames, edge_a = edge_frames_nodb(
+            row['vfile'], db.loc[session, 'edge'], side=side, debug=True,
+            **kwargs)
+        
+        return frames, edge_a
+    else:
+        edge_frames_nodb(
+            row['vfile'], db.loc[session, 'edge'], side=side, debug=False,
+            **kwargs)
 
-    # Save
-    whiskvid.db.save_db(db)  
+        # Save
+        whiskvid.db.save_db(db)  
 
 def edge_frames_nodb(video_file, edge_file, 
     lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
     split_iters=13, n_frames=np.inf, 
-    stride=100, side='left', **kwargs):
-    """Edge all frames and save to edge_file. Also debug plot"""
-    ## Now calculate the edges
+    stride=100, side='left', meth='largest_in_roi', debug=False, **kwargs):
+    """Edge all frames and save to edge_file. Also plot_edge_subset.
+    
+    This is a wrapper around get_all_edges_from_video_file which does the
+    actual edging. This function parses the inputs for it, and handles the
+    saving to disk and the plotting of the edge subset.
+    
+    debug : If True, then this will extract frames and edges from a subset
+        of the frames and display / return them for debugging of parameters.
+        In this case, returns frames, edge_a
+    """
+    # Get video aspect
     width, height = my.video.get_video_aspect(video_file)
     
-    # Get edges
-    edge_a = whiskvid.get_all_edges_from_video(video_file, 
-        n_frames=n_frames, 
-        lum_threshold=lum_threshold, 
-        roi_x=(edge_roi_x0, edge_roi_x1), roi_y=(edge_roi_y0, edge_roi_y1),
-        return_frames_instead=False,
-        meth='largest_in_roi', split_iters=split_iters, side=side, **kwargs)
+    # Form the kwargs that we will use for the call
+    kwargs = kwargs.copy()
+    kwargs['n_frames'] = n_frames
+    kwargs['lum_threshold'] = lum_threshold
+    kwargs['roi_x'] = (edge_roi_x0, edge_roi_x1)
+    kwargs['roi_y'] = (edge_roi_y0, edge_roi_y1)
+    kwargs['meth'] = 'largest_in_roi'
+    kwargs['split_iters'] = split_iters
+    kwargs['side'] = side
+    
+    # Depends on debug
+    if debug:
+        # Set parameters for debugging
+        if np.isinf(n_frames):
+            kwargs['n_frames'] = 1000
+            print "debug mode; lowering n_frames"
+        
+        # Get raw frames
+        frames = whiskvid.get_all_edges_from_video(video_file,
+            return_frames_instead=True, **kwargs)        
+        
+        # Get edges from those frames
+        edge_a = whiskvid.get_all_edges_from_video(video_file,
+            return_frames_instead=False, **kwargs)
+        
+        return frames, edge_a
+    
+    else:
+        # Get edges
+        edge_a = whiskvid.get_all_edges_from_video(video_file,
+            return_frames_instead=False, **kwargs)
 
-    # Save
-    np.save(edge_file, edge_a)
+        # Save
+        np.save(edge_file, edge_a)
 
-    # Plot
-    whiskvid.plot_edge_subset(edge_a, stride=stride,    
-        xlim=(0, width), ylim=(height, 0))
+        # Plot
+        whiskvid.plot_edge_subset(edge_a, stride=stride,    
+            xlim=(0, width), ylim=(height, 0))
 
-
+def purge_edge_frames(session, db=None):
+    """Delete the results of the edged frames.
+    
+    Probably you want to purge the edge summary as well.
+    """
+    # Get the filename
+    if db is None:
+        db = whiskvid.db.load_db()
+    row = db.ix[session]
+    edge_file = db.loc[session, 'edge']
+    
+    # Try to purge it
+    if pandas.isnull(edge_file):
+        print "no edge file to purge"
+    elif not os.path.exists(edge_file):
+        print "cannot find edge file to purge: %r" % edge_file
+    else:
+        os.remove(edge_file)
+    
 
 ## End of functions for extracting objects from video
 
