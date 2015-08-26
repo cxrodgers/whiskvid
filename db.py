@@ -483,7 +483,11 @@ def load_everything_from_session(session, db):
         os.path.join(row['root_dir'], session, row['bfile']))
 
     # Get tips and contacts
-    tac = pandas.read_pickle(os.path.join(row['root_dir'], session, row['tac']))
+    if pandas.isnull(row['tac']):
+        tac = None
+    else:
+        tac = pandas.read_pickle(os.path.join(
+            row['root_dir'], session, row['tac']))
     
     # Get edge_a
     edge_a = np.load(os.path.join(row['root_dir'], session, row['edge']))
