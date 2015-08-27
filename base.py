@@ -966,11 +966,12 @@ def trace_session(session, db=None, **kwargs):
     if pandas.isnull(db.loc[session, 'whiskers']):
         output_file = whiskvid.db.Whiskers.generate_name(row['session_dir'])
         db.loc[session, 'whiskers'] = output_file
-    
+
+    # Save right away, to avoid stale db
+    whiskvid.db.save_db(db)  
+
     trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])
     
-    # Save
-    whiskvid.db.save_db(db)  
 
 def trace_session_nodb(input_file, output_file, verbose=False):
     """Trace whiskers from input to output"""
