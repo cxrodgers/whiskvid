@@ -379,13 +379,19 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     mask_is_in_roi[0] = 0 # do not allow background
     if np.sum(mask_is_in_roi) == 0:
         #raise ValueError("no objects found in ROI")
-        return None
+        if debug:
+            return binframe, None, None
+        else:
+            return None
     best_id = np.where(mask_is_in_roi)[0][np.argmax(szs[mask_is_in_roi])]
 
     # Error if no object found above sz 10000 (100x100)
     if szs[best_id] < 10000:
         #raise ValueError("all objects in the ROI are too small")
-        return None
+        if debug:
+            return binframe, None, None
+        else:
+            return None
 
     # Get the contour of the object
     best_object = objects == best_id
@@ -399,18 +405,25 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
     return_frames_instead=False, meth='largest_in_roi', split_iters=10,
-    side='left'):
-    """Top-level function for extracting edges from video
+    side='left', debug=False, debug_frametimes=None):
+    """Function that captures video frames and calls find_edge_of_shape.
     
-    Uses process_chunks_of_video and find_edge_of_shape
-    Typically you want to test on a small number of frames to make sure
-    it's working.
+    The normal function is to call process_chunks_of_video on the whole
+    video. Alternatively, the raw frames can be returned (to allow the user
+    to set parameters). Or, it can be run in debug mode, which returns
+    all intermediate computations (and uses get_frame instead of
+    process_chunks_of_video).
     
     return_frames_instead : for debugging. If True, return the raw frames
         instead of the edges
     side : Must be either 'left' or 'top'
         If 'left', then uses get_bottom_edge
         If 'top', then uses get_left_edge
+    debug : If True, then enter debug mode which is slower but allows
+        debugging. Gets individual frames with my.video.get_frame instead
+        of processing chunks using my.video.process_chunks_of_video.
+        Passes debug=True to find_edge_of_shape in order to extract
+        the intermediate results, like thresholded shapes and best objects.
     
     Returns: edge_a
     """
@@ -422,28 +435,58 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     else:
         raise ValueError("side must be left or top, instead of %r" % side)
     
-    # Helper function to pass to process_chunks_of_video
-    def mapfunc(frame):
-        """Gets the edge from each frame"""
-        edge = find_edge_of_shape(frame, lum_threshold=50,
-            roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
-            meth=meth, split_iters=split_iters)
-        if edge is None:
-            return None
-        else:
-            return edge.astype(np.int16)
+    if not debug:
+        # Helper function to pass to process_chunks_of_video
+        def mapfunc(frame):
+            """Gets the edge from each frame"""
+            edge = find_edge_of_shape(frame, lum_threshold=lum_threshold,
+                roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
+                meth=meth, split_iters=split_iters)
+            if edge is None:
+                return None
+            else:
+                return edge.astype(np.int16)
 
-    if return_frames_instead:
-        mapfunc = 'keep'
+        if return_frames_instead:
+            mapfunc = 'keep'
 
-    # Get the edges
-    edge_a = my.video.process_chunks_of_video(video_file, 
-        n_frames=n_frames,
-        func=mapfunc,
-        verbose=verbose,
-        finalize='listcomp')
+        # Get the edges
+        edge_a = my.video.process_chunks_of_video(video_file, 
+            n_frames=n_frames,
+            func=mapfunc,
+            verbose=verbose,
+            finalize='listcomp')
 
-    return edge_a
+        return edge_a
+    
+    else:
+        if debug_frametimes is None:
+            raise ValueError("must specify debug frametimes")
+        
+        # Value to return
+        res = {'frames': [], 'binframes': [], 'best_objects': [], 'edges': []}
+        
+        # Iterate over frames
+        for frametime in debug_frametimes:
+            # Get the frame
+            frame, stdout, stderr = my.video.get_frame(video_file, frametime)
+            
+            # Compute the edge and intermediate results
+            binframe, best_object, edge = find_edge_of_shape(
+                frame, lum_threshold=lum_threshold,
+                roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
+                meth=meth, split_iters=split_iters, debug=True)
+            
+            if edge is not None:
+                edge = edge.astype(np.int16)
+            
+            # Store and return
+            res['frames'].append(frame)
+            res['binframes'].append(binframe)
+            res['best_objects'].append(best_object)
+            res['edges'].append(edge)
+        
+        return res
 
 def plot_edge_subset(edge_a, stride=200, xlim=(0, 640), ylim=(480, 0)):
     """Overplot the edges to test whether they were detected"""
@@ -673,11 +716,16 @@ def purge_edge_frames(session, db=None):
         os.remove(edge_file)
     
 def edge_frames_debug_plot(session):
-    """This is a helper function for debugging edging (not finished)."""
+    """This is a helper function for debugging edging.
+    
+    For some subset of frames, plot the raw frame, the detected edge, maybe
+    the thresholded frame and the detected objects as well.
+    """
     # Extract raw frames with edges
     frames, edge_a = whiskvid.edge_frames(
         session, verbose=True, debug=True)    
     db = whiskvid.db.load_db()
+    
     # Plot them
     f, axa = plt.subplots(5, 5)
     nax = 0
