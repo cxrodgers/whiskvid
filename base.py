@@ -677,7 +677,7 @@ def edge_frames_debug_plot(session):
     # Extract raw frames with edges
     frames, edge_a = whiskvid.edge_frames(
         session, verbose=True, debug=True)    
-    
+    db = whiskvid.db.load_db()
     # Plot them
     f, axa = plt.subplots(5, 5)
     nax = 0
@@ -727,12 +727,13 @@ def put_whiskers_into_hdf5(session, db=None, **kwargs):
     if pandas.isnull(db.loc[session, 'wseg_h5']):
         output_file = os.path.join(row['session_dir'], session + '.wseg.h5')
         db.loc[session, 'wseg_h5'] = output_file
-    
+
+    # Save immediately to avoid race
+    whiskvid.db.save_db(db)      
+
     put_whiskers_into_hdf5_nodb(row['whiskers'], db.loc[session, 'wseg_h5'],
         **kwargs)
 
-    # Save
-    whiskvid.db.save_db(db)      
 
 def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
     flush_interval=100000, truncate_seg=None):
@@ -1042,14 +1043,20 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     verbose=True):
     # Get the ends
     resdf = get_whisker_ends_hdf5(h5_filename, side=side)
+    if verbose:
+        print "whisker rows: %d" % len(resdf)
 
     # Drop everything < thresh
     resdf = resdf[resdf['length'] >= length_thresh]
+    if verbose:
+        print "whisker rows after length: %d" % len(resdf)
 
     # Follicle mask
     resdf = resdf[
         (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
         (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
+    if verbose:
+        print "whisker rows after follicle mask: %d" % len(resdf)
 
     # Get the edges
     edge_a = np.load(edge_file)
@@ -1075,6 +1082,10 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
             contacts_l.append({'index': idx, 'closest_dist': closest_dist,
                 'closest_edge_idx': closest_edge_idx})
     contacts_df = pandas.DataFrame.from_records(contacts_l)
+
+    if len(contacts_df) == 0:
+        # Not sure how to form a nice empty dataframe here
+        raise ValueError("no contacts found")
 
     # Join
     tips_and_contacts = resdf.join(contacts_df.set_index('index'))
