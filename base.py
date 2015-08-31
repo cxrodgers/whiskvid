@@ -329,7 +329,7 @@ def plot_all_objects(objects, nobjects):
     plt.show()
 
 def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
-    roi_y=(0, 480), size_threshold=10000, edge_getter=get_bottom_edge,
+    roi_y=(0, 480), size_threshold=1000, edge_getter=get_bottom_edge,
     meth='largest_in_roi', split_iters=10, debug=False):
     """Find the left edge of the shape in frame.
     
@@ -342,7 +342,9 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     
     meth: largest_with_centroid_in_roi, largest_in_roi
     
-    If debug: returns binframe, best_object, edge
+    If debug: returns binframe, best_object, edge, status
+        where status is 'none in ROI', 'all too small', or 'good'
+        unless status is 'good', best_object and edge are None
     
     Returns: bottom edge, as sequence of (y, x) (or row, col) pairs
         If no acceptable object is found, returns None.
@@ -380,16 +382,16 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     if np.sum(mask_is_in_roi) == 0:
         #raise ValueError("no objects found in ROI")
         if debug:
-            return binframe, None, None
+            return binframe, None, None, 'none in ROI'
         else:
             return None
     best_id = np.where(mask_is_in_roi)[0][np.argmax(szs[mask_is_in_roi])]
 
     # Error if no object found above sz 10000 (100x100)
-    if szs[best_id] < 10000:
+    if szs[best_id] < size_threshold:
         #raise ValueError("all objects in the ROI are too small")
         if debug:
-            return binframe, None, None
+            return binframe, None, None, 'all too small'
         else:
             return None
 
@@ -398,7 +400,7 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     edge = edge_getter(best_object)
 
     if debug:
-        return binframe, best_object, edge
+        return binframe, best_object, edge, 'good'
     else:
         return edge
 
@@ -410,9 +412,13 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
     
     The normal function is to call process_chunks_of_video on the whole
     video. Alternatively, the raw frames can be returned (to allow the user
-    to set parameters). Or, it can be run in debug mode, which returns
+    to set parameters). This is also better because the same exact frames
+    are returned as would have been processed.
+    
+    Or, it can be run in debug mode, which returns
     all intermediate computations (and uses get_frame instead of
-    process_chunks_of_video).
+    process_chunks_of_video). Not clear that this method returns exactly
+    the same frames.
     
     return_frames_instead : for debugging. If True, return the raw frames
         instead of the edges
@@ -464,7 +470,8 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
             raise ValueError("must specify debug frametimes")
         
         # Value to return
-        res = {'frames': [], 'binframes': [], 'best_objects': [], 'edges': []}
+        res = {'frames': [], 'binframes': [], 'best_objects': [], 'edges': [],
+            'statuses': []}
         
         # Iterate over frames
         for frametime in debug_frametimes:
@@ -472,7 +479,7 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
             frame, stdout, stderr = my.video.get_frame(video_file, frametime)
             
             # Compute the edge and intermediate results
-            binframe, best_object, edge = find_edge_of_shape(
+            binframe, best_object, edge, status = find_edge_of_shape(
                 frame, lum_threshold=lum_threshold,
                 roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
                 meth=meth, split_iters=split_iters, debug=True)
@@ -485,6 +492,7 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
             res['binframes'].append(binframe)
             res['best_objects'].append(best_object)
             res['edges'].append(edge)
+            res['statuses'].append(status)
         
         return res
 
@@ -715,39 +723,63 @@ def purge_edge_frames(session, db=None):
     else:
         os.remove(edge_file)
     
-def edge_frames_debug_plot(session):
+def edge_frames_debug_plot(session, frametimes, split_iters=7):
     """This is a helper function for debugging edging.
     
-    For some subset of frames, plot the raw frame, the detected edge, maybe
-    the thresholded frame and the detected objects as well.
+    For some subset of frames, plot the raw frame, the detected edge,
+    the thresholded frame and (TODO) the detected objects.
+    
+    Uses whiskvid.get_all_edges_from_video to get the intermediate results,
+    and then plots them. Also returns all intermediate results.
     """
-    # Extract raw frames with edges
-    frames, edge_a = whiskvid.edge_frames(
-        session, verbose=True, debug=True)    
+    import my.plot 
+    
+    if len(frametimes) > 64:
+        raise ValueError("too many frametimes")
+    
+    # Get raw frames, binframes, edges, on a subset
     db = whiskvid.db.load_db()
+    v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
+    video_file = db.loc[session, 'vfile']
+    side = db.loc[session, 'side']
+    roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
+    roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
+    debug_res = whiskvid.get_all_edges_from_video(video_file, 
+        roi_x=roi_x, roi_y=roi_y, split_iters=split_iters, side=side,
+        debug=True, debug_frametimes=frametimes)    
     
     # Plot them
-    f, axa = plt.subplots(5, 5)
+    f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True)
+    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True)
     nax = 0
-    stride = 10
-    for nframe, (frame, edge) in enumerate(zip(frames[::stride], edge_a[::stride])):
-        #~ # This is a good way to test
-        #~ binframe, best_object, edge = whiskvid.find_edge_of_shape(frame, 
-            #~ lum_threshold=50, roi_x=(150, 390), roi_y=(150, 390), 
-            #~ edge_getter=whiskvid.base.get_left_edge, debug=True)
+    for nax, ax in enumerate(axa.flatten()):
+        # Get results for this frame
+        frame = debug_res['frames'][nax]
+        binframe = debug_res['binframes'][nax]
+        best_object = debug_res['best_objects'][nax]
+        edge = debug_res['edges'][nax]
+        frametime = frametimes[nax]
         
-        if edge is None:
-            continue
-        ax = axa.flatten()[nax]
-        nax = nax + 1
-        if nax == len(axa.flatten()):
-            break
-        v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
-        im2 = my.plot.imshow(frame, ax=ax, 
-            axis_call='image', cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
-        ax.plot(edge[:, 1], edge[:, 0], 'g-')
-        ax.set_title("frame %d" % nframe)
-        plt.show()    
+        # Plot the frame
+        im = my.plot.imshow(frame, ax=ax, axis_call='image', 
+            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+        
+        # Plot the edge
+        if edge is not None:
+            ax.plot(edge[:, 1], edge[:, 0], 'g-')
+        
+        # Plot the binframe
+        ax2 = axa2.flatten()[nax]
+        im2 = my.plot.imshow(binframe, ax=ax2, axis_call='image',
+            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+        
+        # Plot the best object
+        ax.set_title("t=%0.1f %s" % (
+            frametime, 'NO EDGE' if edge is None else ''))
+    f.tight_layout()
+    f2.tight_layout()
+    plt.show()    
+    return debug_res
 
 ## End of functions for extracting objects from video
 
