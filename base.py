@@ -1033,7 +1033,10 @@ def calculate_contacts_session(session, db=None, **kwargs):
         db.loc[session, 'tac'] = whiskvid.db.Contacts.generate_name(
             row['session_dir'])
     tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
-        tac_filename=db.loc[session, 'tac'], **kwargs)
+        tac_filename=db.loc[session, 'tac'], 
+        fol_range_x=(db.loc[session, 'fol_x0'], db.loc[session, 'fol_x1']),
+        fol_range_y=(db.loc[session, 'fol_y0'], db.loc[session, 'fol_y1']),
+        **kwargs)
     
     whiskvid.db.save_db(db)
 
