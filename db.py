@@ -483,7 +483,7 @@ def load_everything_from_session(session, db):
         os.path.join(row['root_dir'], session, row['bfile']))
 
     # Get tips and contacts
-    if pandas.isnull(row['tac']):
+    if pandas.isnull(row['tac']) or not os.path.exists(row['tac']):
         tac = None
     else:
         tac = pandas.read_pickle(os.path.join(
