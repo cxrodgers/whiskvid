@@ -1485,7 +1485,7 @@ def get_tac(session, min_t=None, max_t=None):
     return tac
 
 def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
-    alpha=1):
+    **plot_kwargs):
     """Plot the contact locations based on which trial type or response.
     
     whiskvid.db.add_trials_to_tac is used to connect the contact times
@@ -1495,6 +1495,13 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
     """
     db = whiskvid.db.load_db()
     tac = get_tac(session, min_t=min_t, max_t=max_t)
+    
+    if 'marker' not in plot_kwargs:
+        plot_kwargs['marker'] = 'o'
+    if 'mec' not in plot_kwargs:
+        plot_kwargs['mec'] = 'none'
+    if 'ls' not in plot_kwargs:
+        plot_kwargs['ls'] = 'none'
 
     if ax is None:
         f, ax = plt.subplots()
@@ -1505,8 +1512,8 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         gobj = my.pick_rows(tac, 
             choice=['left', 'right'], outcome='hit', isrnd=True).groupby('rewside')
         for rewside, subtac in gobj:
-            ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-                color=rewside2color[rewside], mec='none', alpha=alpha)
+            ax.plot(subtac['tip_x'], subtac['tip_y'],
+                color=rewside2color[rewside], **plot_kwargs)
             ax.set_xlim((0, db.loc[session, 'v_width']))
             ax.set_ylim((db.loc[session, 'v_height'], 0))
         my.plot.rescue_tick(ax=ax, x=4, y=4)
@@ -1516,8 +1523,8 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         gobj = my.pick_rows(tac, 
             choice=['left', 'right'], isrnd=True).groupby('choice')
         for rewside, subtac in gobj:
-            ax.plot(subtac['tip_x'], subtac['tip_y'], 'o',
-                color=rewside2color[rewside], mec='none', alpha=alpha)
+            ax.plot(subtac['tip_x'], subtac['tip_y'],
+                color=rewside2color[rewside], **plot_kwargs)
             ax.set_xlim((0, db.loc[session, 'v_width']))
             ax.set_ylim((db.loc[session, 'v_height'], 0))
         my.plot.rescue_tick(ax=ax, x=4, y=4)
