@@ -1039,7 +1039,8 @@ def crop_session_nodb(input_file, output_file, crop_x0, crop_x1,
 
 ## tracing
 def trace_session(session, db=None, create_monitor_video=False, 
-    chunk_size=200, stop_after_frame=None, n_trace_processes=8):
+    chunk_size=200, stop_after_frame=None, n_trace_processes=8,
+    monitor_video_kwargs=None):
     """Runs trace on session using WhiskiWrap.
     
     Currently this only works on modulated mat files.
@@ -1050,8 +1051,12 @@ def trace_session(session, db=None, create_monitor_video=False,
     If tiffs_to_trace directory already exists, the first step is skipped.
     
     session : name of session to trace
-    create_monitor_video : Whether to create a lossless monitor video
-        This is typically only useful for debugging and takes a long time
+    create_monitor_video : Whether to create a monitor video
+        This could be useful for subsequent analysis (eg, shapes)
+    monitor_video_kwargs : dict of kwargs for trace_write_chunked_tiffs_nodb
+        Default: {'vcodec': 'libx264', 'qp': 15}
+        For lossless, use {'vcodec': 'libx264', 'qp': 0}
+
     chunk_size, stop_after_frame : passed to trace_write_chunked_tiffs_nodb
     
     """
@@ -1084,8 +1089,9 @@ def trace_session(session, db=None, create_monitor_video=False,
             'tiff_timestamps.npy')
         if create_monitor_video:
             monitor_video = os.path.join(whisker_session_directory,
-                '151113_CR1.lossless.mkv')
-            monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 0}
+                '151113_CR1.mkv')
+            if monitor_video_kwargs is None:
+                monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 21}
         else:
             monitor_video = None
             monitor_video_kwargs = {}
