@@ -372,6 +372,12 @@ def rescan_db():
                 db.loc[session, 'session_dir'])
             db_changed = True
         
+        vfile_fn = db.loc[session, 'vfile']
+        if pandas.isnull(vfile_fn) or not os.path.exists(vfile_fn):
+            db.loc[session, 'vfile'] = RawVideo.find(
+                db.loc[session, 'session_dir'])
+            db_changed = True        
+        
         if pandas.isnull(db.loc[session, 'date_s']):
             print "setting date_s for %s to %s" % (session, session[:6])
             db.loc[session, 'date_s'] = session[:6]
