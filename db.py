@@ -407,7 +407,7 @@ def create_session_directory(input_file=None, matfile_directory=None,
     tracing parameters are copied into that directory.
     
     Finally a row is created in the db containing paths to the session
-    directory and input_file.
+    directory, root directory, matfile directory, input file, and date_s.
     
     input_file : video file to trace. If None, must provide matfile_directory.
     matfile_directory : directory containing modulated matfiles
@@ -432,6 +432,7 @@ def create_session_directory(input_file=None, matfile_directory=None,
     # Store the location of the session and root
     db.loc[session, 'session_dir'] = session_dir
     db.loc[session, 'root_dir'] = ROOT_DIR
+    db.loc[session, 'date_s'] = session[:6]
     
     save_db(db)
 
@@ -456,8 +457,11 @@ def create_session_directory_nodb(session, root_dir=ROOT_DIR, verbose=True):
 
 def find_closest_bfile(date_string, 
     behavior_dir='/home/chris/runmice/L0/logfiles'):
-    """Given a date string like 150313, find the bfile from that day"""
-    bfile_l = glob.glob(os.path.join(behavior_dir, 'ardulines.*%s*.*' % 
+    """Given a date string like 150313, find the bfile from that day
+    
+    This prepends "20" so it would look for 20150313.
+    """
+    bfile_l = glob.glob(os.path.join(behavior_dir, 'ardulines.*20%s*.*' % 
         date_string))
     
     try:
@@ -487,7 +491,8 @@ def save_db(db, filename='/home/chris/dev/whisker_db/db.csv'):
     db.to_csv(filename)
 
 def load_db(filename='/home/chris/dev/whisker_db/db.csv'):
-    return pandas.read_csv(filename, index_col='session')
+    return pandas.read_csv(filename, index_col='session',
+        converters={'date_s': str})
 
 def flush_db(filename='/home/chris/dev/whisker_db/db.csv'):
     db = create_db_from_root_dir(savename=filename)

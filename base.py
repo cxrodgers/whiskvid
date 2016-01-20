@@ -1095,7 +1095,7 @@ def trace_session(session, db=None, create_monitor_video=False,
         if not os.path.exists(tiffs_to_trace_directory):
             # Create the directory and run trace_write_chunked_tiffs_nodb
             os.mkdir(tiffs_to_trace_directory)
-            trace_write_chunked_tiffs_nodb(
+            frame_width, frame_height = trace_write_chunked_tiffs_nodb(
                 matfile_directory=db.loc[session, 'matfile_directory'],
                 tiffs_to_trace_directory=tiffs_to_trace_directory,
                 timestamps_filename=timestamps_filename,
@@ -1104,6 +1104,13 @@ def trace_session(session, db=None, create_monitor_video=False,
                 chunk_size=chunk_size,
                 stop_after_frame=stop_after_frame,
                 )
+            
+            # Store the frame_width and frame_height
+            db = whiskvid.db.load_db()
+            if pandas.isnull(db.loc[session, 'v_width']):
+                db.loc[session, 'v_width'] = frame_width
+                db.loc[session, 'v_height'] = frame_height
+                whiskvid.db.save_db(db)
         
         # Tiffs have been written
         # Now trace the session
@@ -1118,6 +1125,7 @@ def trace_write_chunked_tiffs_nodb(matfile_directory, tiffs_to_trace_directory,
     chunk_size=None, stop_after_frame=None):
     """Generate a PF reader and call WhiskiWrap.write_video_as_chunked_tiffs
     
+    Returns: frame_width, frame_height
     """
     # Generate a PF reader
     pfr = WhiskiWrap.PFReader(matfile_directory)
@@ -1129,6 +1137,8 @@ def trace_write_chunked_tiffs_nodb(matfile_directory, tiffs_to_trace_directory,
         monitor_video=monitor_video,
         timestamps_filename=timestamps_filename,
         monitor_video_kwargs=monitor_video_kwargs)    
+    
+    return pfr.frame_width, pfr.frame_height
 
 def trace_session_nodb(h5_filename, tiffs_to_trace_directory,
     n_trace_processes=8):
