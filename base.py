@@ -24,6 +24,7 @@ import my
 import ArduFSM
 import BeWatch
 import whiskvid
+import WhiskiWrap
 import matplotlib.pyplot as plt
 try:
     import tables
@@ -1037,41 +1038,106 @@ def crop_session_nodb(input_file, output_file, crop_x0, crop_x1,
 ## end cropping
 
 ## tracing
-def trace_session(session, db=None, **kwargs):
-    """Crops the input file into the output file, and updates db"""
+def trace_session(session, db=None, create_monitor_video=False, 
+    chunk_size=200, stop_after_frame=None, n_trace_processes=8):
+    """Runs trace on session using WhiskiWrap.
+    
+    Currently this only works on modulated mat files.
+    It first writes them out as tiffs to trace
+        trace_write_chunked_tiffs_nodb
+    And then traces them
+        trace_session_nodb
+    If tiffs_to_trace directory already exists, the first step is skipped.
+    
+    session : name of session to trace
+    create_monitor_video : Whether to create a lossless monitor video
+        This is typically only useful for debugging and takes a long time
+    chunk_size, stop_after_frame : passed to trace_write_chunked_tiffs_nodb
+    
+    """
     if db is None:
         db = whiskvid.db.load_db()
-    row = db.ix[session]
+
+    # Extract some info from the db
+    whisker_session_directory = db.loc[session, 'session_dir']
     
-    # Generate output file name
-    if pandas.isnull(db.loc[session, 'whiskers']):
-        output_file = whiskvid.db.Whiskers.generate_name(row['session_dir'])
-        db.loc[session, 'whiskers'] = output_file
+    # Error check that matfile_directory exists
+    # Later rewrite this to run on raw videos too
+    if pandas.isnull(db.loc[session, 'matfile_directory']):
+        raise ValueError("trace only supports matfile directory for now")
 
-    # Save right away, to avoid stale db
-    whiskvid.db.save_db(db)  
+    # Store the wseg_h5_fn in the db if necessary
+    if pandas.isnull(db.loc[session, 'wseg_h5']):
+        # Create a wseg h5 filename
+        db.loc[session, 'wseg_h5'] = whiskvid.db.WhiskersHDF5.generate_name(
+            whisker_session_directory)
+        
+        # Save right away, to avoid stale db
+        whiskvid.db.save_db(db)  
 
-    trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])
+    # Run the trace if the file doesn't exist
+    if not os.path.exists(db.loc[session, 'wseg_h5']):
+        # Where to put tiff stacks and timestamps and monitor video
+        tiffs_to_trace_directory = os.path.join(whisker_session_directory, 
+            'tiffs_to_trace')
+        timestamps_filename = os.path.join(whisker_session_directory, 
+            'tiff_timestamps.npy')
+        if create_monitor_video:
+            monitor_video = os.path.join(whisker_session_directory,
+                '151113_CR1.lossless.mkv')
+            monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 0}
+        else:
+            monitor_video = None
+            monitor_video_kwargs = {}
+        
+        # Skip writing tiffs if the directory already exists
+        # This is a bit of a hack because tiffs_to_trace is not in the db
+        if not os.path.exists(tiffs_to_trace_directory):
+            # Create the directory and run trace_write_chunked_tiffs_nodb
+            os.mkdir(tiffs_to_trace_directory)
+            trace_write_chunked_tiffs_nodb(
+                matfile_directory=db.loc[session, 'matfile_directory'],
+                tiffs_to_trace_directory=tiffs_to_trace_directory,
+                timestamps_filename=timestamps_filename,
+                monitor_video=monitor_video, 
+                monitor_video_kwargs=monitor_video_kwargs,
+                chunk_size=chunk_size,
+                stop_after_frame=stop_after_frame,
+                )
+        
+        # Tiffs have been written
+        # Now trace the session
+        trace_session_nodb(
+            h5_filename=db.loc[session, 'wseg_h5'],
+            tiffs_to_trace_directory=tiffs_to_trace_directory,
+            n_trace_processes=n_trace_processes,
+            )
+
+def trace_write_chunked_tiffs_nodb(matfile_directory, tiffs_to_trace_directory,
+    timestamps_filename=None, monitor_video=None, monitor_video_kwargs=None,
+    chunk_size=None, stop_after_frame=None):
+    """Generate a PF reader and call WhiskiWrap.write_video_as_chunked_tiffs
     
+    """
+    # Generate a PF reader
+    pfr = WhiskiWrap.PFReader(matfile_directory)
 
-def trace_session_nodb(input_file, output_file, verbose=False):
+    # Write the video
+    ctw = WhiskiWrap.write_video_as_chunked_tiffs(pfr, tiffs_to_trace_directory,
+        chunk_size=chunk_size,
+        stop_after_frame=stop_after_frame, 
+        monitor_video=monitor_video,
+        timestamps_filename=timestamps_filename,
+        monitor_video_kwargs=monitor_video_kwargs)    
+
+def trace_session_nodb(h5_filename, tiffs_to_trace_directory,
+    n_trace_processes=8):
     """Trace whiskers from input to output"""
-    cmd = 'trace %s %s' % (input_file, output_file)
-    run_dir = os.path.split(input_file)[0]
-    run_dir2 = os.path.split(output_file)[0]
-    if run_dir != run_dir2:
-        raise ValueError("warning: trace I/O needs same dir")
-    if verbose:
-        print cmd
-    
-    orig_dir = os.getcwd()
-    os.chdir(run_dir)
-    try:        
-        os.system(cmd)
-    except:
-        raise
-    finally:
-        os.chdir(orig_dir)
+    WhiskiWrap.trace_chunked_tiffs(
+        h5_filename=h5_filename,
+        input_tiff_directory=tiffs_to_trace_directory,
+        n_trace_processes=n_trace_processes,
+        )
 
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):
