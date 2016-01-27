@@ -329,17 +329,27 @@ def plot_all_objects(objects, nobjects):
         axa[object_id].imshow(objects == object_id)
     plt.show()
 
-def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
+def find_edge_of_shape(frame, 
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
+    lum_threshold=30, roi_x=(320, 640),
     roi_y=(0, 480), size_threshold=1000, edge_getter=get_bottom_edge,
     meth='largest_in_roi', split_iters=10, debug=False):
     """Find the left edge of the shape in frame.
     
     This is a wrapper around the other utility functions
     
+    0. Crops image. The purpose of this is to remove dark spots that may
+      be contiguous with the shape. For instance, dark border of frame, or
+      mouse face, or pipes.
     1. Thresholds image to find dark spots
     2. Segments the dark spots using scipy.ndimage.label
     3. Chooses the largest dark spot within the ROI
     4. Finds the left edge of this spot
+    
+    crop_x0 : ignore all pixels to the left of this value
+    crop_x1 : ignore all pixels to the right of this value
+    crop_y0 : ignore all pixels above (less than) this value
+    crop_y1 : ignore all pixels below (greater than) this value
     
     meth: largest_with_centroid_in_roi, largest_in_roi
     
@@ -352,6 +362,16 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     """
     # Segment image
     binframe = frame < lum_threshold
+    
+    # Force the area that is outside the crop to be 0 (ignored)
+    if crop_x0 is not None:
+        binframe[:, :crop_x0] = 0
+    if crop_x1 is not None:
+        binframe[:, crop_x1:] = 0
+    if crop_y0 is not None:
+        binframe[:crop_y0, :] = 0
+    if crop_y1 is not None:
+        binframe[crop_y1:, :] = 0
     
     # Split apart the pipes and the shape
     opened_binframe = scipy.ndimage.morphology.binary_opening(
@@ -406,6 +426,7 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
         return edge
 
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
     return_frames_instead=False, meth='largest_in_roi', split_iters=10,
     side='left', debug=False, debug_frametimes=None):
@@ -446,7 +467,10 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         # Helper function to pass to process_chunks_of_video
         def mapfunc(frame):
             """Gets the edge from each frame"""
-            edge = find_edge_of_shape(frame, lum_threshold=lum_threshold,
+            edge = find_edge_of_shape(frame, 
+                crop_x0=crop_x0, crop_x1=crop_x1, 
+                crop_y0=crop_y0, crop_y1=crop_y1,
+                lum_threshold=lum_threshold,
                 roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
                 meth=meth, split_iters=split_iters)
             if edge is None:
@@ -482,6 +506,8 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
             # Compute the edge and intermediate results
             binframe, best_object, edge, status = find_edge_of_shape(
                 frame, lum_threshold=lum_threshold,
+                crop_x0=crop_x0, crop_x1=crop_x1, 
+                crop_y0=crop_y0, crop_y1=crop_y1,                
                 roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
                 meth=meth, split_iters=split_iters, debug=True)
             
@@ -550,6 +576,21 @@ def edge_frames_manual_params_db(session, interactive=True, **kwargs):
 
 
 def edge_frames_manual_params(video_file, interactive=True, **kwargs):
+    """Interactively set the parameters for edging.
+    
+    Takes the first 10000 frames of the video. Sorts the frames by those
+    that have minimal intensity in the upper right corner. Plots a subset
+    of those. (This all assumes dark shapes coming in from the upper right.)
+    
+    This heatmap view allows the user to visualize the typical luminance of
+    the shape, to set lumthresh.
+    
+    Then calls choose_rectangular_ROI so that the user can interactively set
+    the ROI that always includes some part of the shape and never includes
+    the face.
+    
+    Finally the user inputs the face side.
+    """
     width, height = my.video.get_video_aspect(video_file)
     
     # Try to find a frame with a good example of a shape
@@ -559,7 +600,6 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     frames_a = my.video.process_chunks_of_video(video_file, n_frames=10000,
         func='keep', frame_chunk_sz=1000, verbose=True, finalize='listcomp')
     idxs = np.argsort([keep_roi(frame).min() for frame in frames_a])
-    best_frame = frames_a[idxs[0]]
 
     # Plot it so we can set params
     f, axa = plt.subplots(3, 3)
@@ -724,7 +764,10 @@ def purge_edge_frames(session, db=None):
     else:
         os.remove(edge_file)
     
-def edge_frames_debug_plot(session, frametimes, split_iters=7):
+def edge_frames_debug_plot(session, frametimes, split_iters=7,
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
+    roi_x=None, roi_y=None, lumthresh=None, side=None,
+    ):
     """This is a helper function for debugging edging.
     
     For some subset of frames, plot the raw frame, the detected edge,
@@ -732,6 +775,11 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
     
     Uses whiskvid.get_all_edges_from_video to get the intermediate results,
     and then plots them. Also returns all intermediate results.
+    
+    frametimes : which frames to analyze as a test
+    
+    roi_x, roi_y, lumthresh, side : can be provided, or else will be taken
+        from db
     """
     import my.plot 
     
@@ -742,20 +790,34 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
     db = whiskvid.db.load_db()
     v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
     video_file = db.loc[session, 'vfile']
-    side = db.loc[session, 'side']
-    roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
-    roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
+    
+    # Get params from db if necessary
+    if side is None:
+        side = db.loc[session, 'side']
+    if roi_x is None:
+        roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
+    if roi_y is None:
+        roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
+    if lumthresh is None:
+        lumthresh = db.loc[session, 'edge_lumthresh']
+    
+    # Gets the edges from subset of debug frames using provided parameters
     debug_res = whiskvid.get_all_edges_from_video(video_file, 
+        crop_x0=crop_x0, crop_x1=crop_x1, crop_y0=crop_y0, crop_y1=crop_y1,
         roi_x=roi_x, roi_y=roi_y, split_iters=split_iters, side=side,
+        lum_threshold=lumthresh,
         debug=True, debug_frametimes=frametimes)    
     
     # Plot them
-    f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True)
-    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True)
+    f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
+    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
     nax = 0
     for nax, ax in enumerate(axa.flatten()):
         # Get results for this frame
-        frame = debug_res['frames'][nax]
+        try:
+            frame = debug_res['frames'][nax]
+        except IndexError:
+            break
         binframe = debug_res['binframes'][nax]
         best_object = debug_res['best_objects'][nax]
         edge = debug_res['edges'][nax]
@@ -767,7 +829,7 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
         
         # Plot the edge
         if edge is not None:
-            ax.plot(edge[:, 1], edge[:, 0], 'g-')
+            ax.plot(edge[:, 1], edge[:, 0], 'g-', lw=5)
         
         # Plot the binframe
         ax2 = axa2.flatten()[nax]
@@ -776,7 +838,11 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
         
         # Plot the best object
         ax.set_title("t=%0.1f %s" % (
-            frametime, 'NO EDGE' if edge is None else ''))
+            frametime, 'NO EDGE' if edge is None else ''), size='small')
+    f.suptitle('Frames')
+    f2.suptitle('Binarized frames')
+    my.plot.rescue_tick(f=f)
+    my.plot.rescue_tick(f=f2)
     f.tight_layout()
     f2.tight_layout()
     plt.show()    
