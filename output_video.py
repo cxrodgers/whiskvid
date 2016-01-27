@@ -29,8 +29,8 @@ def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
         marker size. Ideally this divides v_width and v_height, I guess?
     """
     # Get metadata
-    v_width, v_height = my.misc.get_video_aspect(video_filename)
-    n_frames_total = int(my.misc.get_video_duration(video_filename) 
+    v_width, v_height = my.video.get_video_aspect(video_filename)
+    n_frames_total = int(my.video.get_video_duration(video_filename) 
         * input_video_fps)
     
     # Set up the input pipe
