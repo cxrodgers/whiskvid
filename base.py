@@ -1112,6 +1112,7 @@ def trace_session(session, db=None, create_monitor_video=False,
     Currently this only works on modulated mat files.
     It first writes them out as tiffs to trace
         trace_write_chunked_tiffs_nodb
+        Optionally at this point a monitor video can also be created.
     And then traces them
         trace_session_nodb
     If tiffs_to_trace directory already exists, the first step is skipped.
@@ -1155,7 +1156,7 @@ def trace_session(session, db=None, create_monitor_video=False,
             'tiff_timestamps.npy')
         if create_monitor_video:
             monitor_video = os.path.join(whisker_session_directory,
-                '151113_CR1.mkv')
+                session + '.mkv')
             if monitor_video_kwargs is None:
                 monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 21}
         else:
