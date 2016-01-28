@@ -10,6 +10,173 @@ import whiskvid
 
 class OutOfFrames(BaseException):
     pass
+
+def write_video_with_overlays(output_filename, input, verbose=False,
+    frame_triggers=None, trigger_dstart=-250, trigger_dstop=50,
+    plot_trial_numbers=True,
+    d_temporal=5, d_spatial=1,
+    dpi=50, output_fps=30, in_buff_sz=1500,
+    input_video_alpha=.5,
+    whiskers_filename=None,
+    edges_filename=None, edge_alpha=1, typical_edges_hist2d=None, 
+    contacts_filename=None, post_contact_linger=100,
+    ):
+    """Creating a video overlaid with whiskers, contacts, etc.
+    
+    The overall dataflow is this:
+    1. Load chunks of frames from the input
+    2. One by one, plot the frame with matplotlib. Overlay whiskers, edges,
+        contacts, whatever.
+    3. Dump the frame to an ffmpeg writer.
+    
+    # Input and output
+    output_filename : file to create
+    input : PFReader or input video
+    
+    # Timing and spatial parameters
+    frame_triggers : Only plot frames within (trigger_dstart, trigger_dstop)
+        of a value in this array.
+    trigger_dstart, trigger_dstop : number of frames
+    d_temporal : Save time by plotting every Nth frame
+    d_spatial : Save time by spatially undersampling the image
+        The bottleneck is typically plotting the raw image in matplotlib
+    
+    # Video parameters
+    dpi : The output video will always be pixel by pixel the same as the
+        input (keeping d_spatial in mind). But this dpi value affects font
+        and marker size.
+    output_fps : set the frame rate of the output video (ffmpeg -r)
+    in_buff_sz : Number of frames to load at once from the input
+    input_video_alpha : alpha of image
+    
+    # Other sources of input
+    whiskers_filename : name of HDF5 table containing whiskers
+    edges_filename : name of file containing edges
+    edge_alpha : alpha of edge
+    contacts_filename : HDF5 file containing contact info
+    post_contact_linger : How long to leave the contact displayed
+    """
+    import WhiskiWrap
+    # Get the width and height
+    if verbose:
+        print "reading first frame to get shape"
+    for first_frame in input.iter_frames():
+        break
+    v_height, v_width = first_frame.shape
+    
+    # Parse the arguments
+    frame_triggers = np.asarray(frame_triggers)
+    
+    ## Set up the graphical handles
+    if verbose:
+        print "setting up handles"
+
+    # Create a figure with an image that fills it
+    figsize = v_width / dpi, v_height / dpi
+    f = plt.figure(frameon=False, dpi=dpi/d_spatial, figsize=figsize)
+    canvas_width, canvas_height = f.canvas.get_width_height()
+    ax = f.add_axes([0, 0, 1, 1])
+    ax.axis('off')
+
+    # Plot typical edge images as static alpha
+    if typical_edges_hist2d is not None:
+        im1 = my.plot.imshow(typical_edges_hist2d, ax=ax, axis_call='image',
+            extent=(0, v_width, v_height, 0), cmap=plt.cm.gray)
+        im1.set_alpha(edge_alpha)
+
+    # Plot input video frames
+    in_image = np.zeros((v_height, v_width))
+    im2 = my.plot.imshow(in_image[::d_spatial, ::d_spatial], ax=ax, 
+        axis_call='image', cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+    im2.set_alpha(input_video_alpha)
+    im2.set_clim((0, 255))
+
+    # Plot contact positions dynamically
+    if contacts_filename is not None:
+        tac = None#
+        contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
+    else:
+        tac = None
+
+    # Dynamic edge
+    if edges_filename is not None:
+        edge_a = None#
+        edge_a_obj, = ax.plot([np.nan], [np.nan], 'g-')
+    else:
+        edge_a = None
+
+    # Text of trial
+    if plot_trial_numbers:
+        txt = ax.text(0, ax.get_ylim()[0], 'waiting', 
+            size=20, ha='left', va='bottom', color='w')
+        trial_number = -1    
+    
+    # Create the writer
+    writer = WhiskiWrap.FFmpegWriter(
+        output_filename=output_filename,
+        frame_width=v_width/d_spatial,
+        frame_height=v_height/d_spatial,
+        output_fps=output_fps,
+        pix_fmt='argb',
+        )
+    
+    ## Frame updating function
+    def update(nframe, frame):
+        # Get the frame
+        im2.set_data(frame[::d_spatial, ::d_spatial])
+        
+        # Get the edges
+        if edge_a is not None:
+            edge_a_frame = edge_a[frame]
+            if edge_a_frame is not None:
+                edge_a_obj.set_xdata(edge_a_frame[:, 1])
+                edge_a_obj.set_ydata(edge_a_frame[:, 0])
+            else:
+                edge_a_obj.set_xdata([np.nan])
+                edge_a_obj.set_ydata([np.nan])
+        
+        # Get the contacts
+        if tac is not None:
+            subtac = tac[(tac.frame < nframe) & 
+                (tac.frame >= nframe - post_contact_linger)]
+            contact_positions.set_xdata(subtac['tip_x'])
+            contact_positions.set_ydata(subtac['tip_y'])
+    
+    ## Loop until input frames exhausted
+    for nframe, frame in enumerate(input.iter_frames()):
+        # Break if we're past the last trigger
+        if nframe > np.max(frame_triggers) + trigger_dstop:
+            break
+        
+        # Skip if we're not on a dframe
+        if np.mod(nframe, d_temporal) != 0:
+            continue
+        
+        # Skip if we're not near a trial
+        nearest_choice_idx = np.nanargmin(np.abs(frame_triggers - nframe))
+        nearest_choice = frame_triggers[nearest_choice_idx]
+        if not (nframe > nearest_choice + trigger_dstart and 
+            nframe < nearest_choice + trigger_dstop):
+            continue
+
+        # Update the trial text
+        if plot_trial_numbers and (nearest_choice_idx > trial_number):
+            txt.set_text('trial %d' % nearest_choice_idx)
+            trial_number = nearest_choice_idx
+
+        # Update the frame
+        update(nframe, frame)
+        plt.draw()
+
+        # Write to pipe
+        string_bytes = f.canvas.tostring_argb()
+        writer.write_bytes(string_bytes)
+    
+    ## Clean up
+    input.close()
+    writer.close()
+    #~ plt.close('f')
+    
     
 def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
     edge_a, output_filename, frame_triggers, 
