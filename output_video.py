@@ -37,7 +37,7 @@ def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
     in_command = ['ffmpeg', '-i', video_filename, '-f', 'image2pipe', 
         '-pix_fmt', 'gray', '-vcodec', 'rawvideo', '-']
     in_pipe = subprocess.Popen(in_command, 
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=10**9)
+        stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'), bufsize=10**9)
 
     # Create a figure with an image that fills it
     figsize = v_width / dpi, v_height / dpi
