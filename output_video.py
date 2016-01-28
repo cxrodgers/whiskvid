@@ -7,17 +7,19 @@ import matplotlib.pyplot as plt
 import my.plot
 import numpy as np
 import whiskvid
+import tables
 
 class OutOfFrames(BaseException):
     pass
 
-def write_video_with_overlays(output_filename, input, verbose=False,
+def write_video_with_overlays(output_filename, input, input_width, input_height,
+    verbose=True,
     frame_triggers=None, trigger_dstart=-250, trigger_dstop=50,
     plot_trial_numbers=True,
     d_temporal=5, d_spatial=1,
     dpi=50, output_fps=30, in_buff_sz=1500,
-    input_video_alpha=.5,
-    whiskers_filename=None,
+    input_video_alpha=1,
+    whiskers_filename=None, side='left',
     edges_filename=None, edge_alpha=1, typical_edges_hist2d=None, 
     contacts_filename=None, post_contact_linger=100,
     ):
@@ -57,22 +59,47 @@ def write_video_with_overlays(output_filename, input, verbose=False,
     post_contact_linger : How long to leave the contact displayed
     """
     import WhiskiWrap
-    # Get the width and height
-    if verbose:
-        print "reading first frame to get shape"
-    for first_frame in input.iter_frames():
-        break
-    v_height, v_width = first_frame.shape
-    
     # Parse the arguments
     frame_triggers = np.asarray(frame_triggers)
+    
+    
+    ## Load the data
+    # Load whiskers
+    if whiskers_filename is not None:
+        if verbose:
+            print "loading whiskers"
+        # Need this to plot the whole whisker
+        whiskers_file_handle = tables.open_file(whiskers_filename)
+        
+        # Could also use get_whisker_ends_hdf5 because it will switch tip
+        # and foll
+        whiskers_table = pandas.DataFrame.from_records(
+            whiskers_file_handle.root.summary.read())
+    else:
+        whiskers_file_handle = None
+    
+    # Load contacts
+    if contacts_filename is not None:
+        if verbose:
+            print "loading contacts"
+        contacts_table = pandas.read_pickle(contacts_filename)
+    else:
+        contacts_table = None
+    
+    # Load edges
+    if edges_filename is not None:
+        if verbose:
+            print "loading edges"
+        edge_a = np.load(edges_filename)
+    else:
+        edge_a = None
     
     ## Set up the graphical handles
     if verbose:
         print "setting up handles"
 
     # Create a figure with an image that fills it
-    figsize = v_width / dpi, v_height / dpi
+    figsize = input_width / dpi, input_height / dpi
     f = plt.figure(frameon=False, dpi=dpi/d_spatial, figsize=figsize)
     canvas_width, canvas_height = f.canvas.get_width_height()
     ax = f.add_axes([0, 0, 1, 1])
@@ -81,29 +108,23 @@ def write_video_with_overlays(output_filename, input, verbose=False,
     # Plot typical edge images as static alpha
     if typical_edges_hist2d is not None:
         im1 = my.plot.imshow(typical_edges_hist2d, ax=ax, axis_call='image',
-            extent=(0, v_width, v_height, 0), cmap=plt.cm.gray)
+            extent=(0, input_width, input_height, 0), cmap=plt.cm.gray)
         im1.set_alpha(edge_alpha)
 
     # Plot input video frames
-    in_image = np.zeros((v_height, v_width))
+    in_image = np.zeros((input_height, input_width))
     im2 = my.plot.imshow(in_image[::d_spatial, ::d_spatial], ax=ax, 
-        axis_call='image', cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+        axis_call='image', cmap=plt.cm.gray, extent=(0, input_width, input_height, 0))
     im2.set_alpha(input_video_alpha)
     im2.set_clim((0, 255))
 
     # Plot contact positions dynamically
     if contacts_filename is not None:
-        tac = None#
         contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
-    else:
-        tac = None
 
     # Dynamic edge
     if edges_filename is not None:
-        edge_a = None#
         edge_a_obj, = ax.plot([np.nan], [np.nan], 'g-')
-    else:
-        edge_a = None
 
     # Text of trial
     if plot_trial_numbers:
@@ -111,23 +132,26 @@ def write_video_with_overlays(output_filename, input, verbose=False,
             size=20, ha='left', va='bottom', color='w')
         trial_number = -1    
     
+    # This will hold whisker objects
+    whisker_handles = []
+    
     # Create the writer
     writer = WhiskiWrap.FFmpegWriter(
         output_filename=output_filename,
-        frame_width=v_width/d_spatial,
-        frame_height=v_height/d_spatial,
+        frame_width=input_width/d_spatial,
+        frame_height=input_height/d_spatial,
         output_fps=output_fps,
         pix_fmt='argb',
         )
     
     ## Frame updating function
-    def update(nframe, frame):
+    def update(nframe, frame, whisker_handles, contacts_table):
         # Get the frame
         im2.set_data(frame[::d_spatial, ::d_spatial])
         
         # Get the edges
         if edge_a is not None:
-            edge_a_frame = edge_a[frame]
+            edge_a_frame = edge_a[nframe]
             if edge_a_frame is not None:
                 edge_a_obj.set_xdata(edge_a_frame[:, 1])
                 edge_a_obj.set_ydata(edge_a_frame[:, 0])
@@ -136,11 +160,32 @@ def write_video_with_overlays(output_filename, input, verbose=False,
                 edge_a_obj.set_ydata([np.nan])
         
         # Get the contacts
-        if tac is not None:
-            subtac = tac[(tac.frame < nframe) & 
-                (tac.frame >= nframe - post_contact_linger)]
+        if contacts_table is not None:
+            subtac = contacts_table[(contacts_table.frame < nframe) & 
+                (contacts_table.frame >= nframe - post_contact_linger)]
             contact_positions.set_xdata(subtac['tip_x'])
             contact_positions.set_ydata(subtac['tip_y'])
+        
+        # Get the whiskers for this frame
+        if whiskers_file_handle is not None:
+            # Remove old whiskers
+            for handle in whisker_handles:
+                handle.remove()
+            whisker_handles = []            
+            
+            sub_summary = whiskers_table[whiskers_table.time == nframe]
+            for idx, row in sub_summary.iterrows():
+                line, = ax.plot(
+                    whiskers_file_handle.root.pixels_x[idx],
+                    whiskers_file_handle.root.pixels_y[idx],
+                    color='yellow')
+                whisker_handles.append(line)
+                #~ line, = ax.plot([row['fol_x']], [row['fol_y']], 'gs')
+                #~ whisker_handles.append(line)
+                #~ line, = ax.plot([row['tip_x']], [row['tip_y']], 'rs')
+                #~ whisker_handles.append(line)
+        
+        return whisker_handles
     
     ## Loop until input frames exhausted
     for nframe, frame in enumerate(input.iter_frames()):
@@ -165,7 +210,7 @@ def write_video_with_overlays(output_filename, input, verbose=False,
             trial_number = nearest_choice_idx
 
         # Update the frame
-        update(nframe, frame)
+        whisker_handles = update(nframe, frame, whisker_handles, contacts_table)
         plt.draw()
 
         # Write to pipe
@@ -173,9 +218,10 @@ def write_video_with_overlays(output_filename, input, verbose=False,
         writer.write_bytes(string_bytes)
     
     ## Clean up
+    whiskers_file_handle.close()
     input.close()
     writer.close()
-    #~ plt.close('f')
+    plt.close('f')
     
     
 def dump_video_with_edge_and_tac(video_filename, typical_edges_hist2d, tac,
