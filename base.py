@@ -1823,6 +1823,10 @@ def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     db.loc[session, 'contact_video'] = output_filename
     whiskvid.db.save_db(db)
 
+def write_video_with_overlays(session):
+    """Wrapper around output_video.write_video_with_overlays"""
+    pass
+
 ## end edge_summary + tac
 
 ## 
