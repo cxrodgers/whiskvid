@@ -15,7 +15,7 @@ class OutOfFrames(BaseException):
 ## Frame updating function
 def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
-    im2, edge_a_obj, contact_positions,
+    im2, edge_a_obj, contact_positions_l,
     d_spatial, d_temporal):
     """Helper function to plot each frame.
     
@@ -47,8 +47,18 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     if contacts_table is not None:
         subtac = contacts_table[(contacts_table.frame < nframe) & 
             (contacts_table.frame >= nframe - post_contact_linger)]
-        contact_positions.set_xdata(subtac['tip_x'])
-        contact_positions.set_ydata(subtac['tip_y'])
+        
+        # Split on group if it exists
+        if 'group' in subtac.columns:
+            # Add a color column
+            for ncolor, contact_positions in enumerate(contact_positions_l):
+                subsubtac = subtac[
+                    subtac['group'].mod(len(contact_positions_l)) == ncolor]
+                contact_positions.set_xdata(subsubtac['tip_x'])
+                contact_positions.set_ydata(subsubtac['tip_y'])
+        else:
+            contact_positions_l[0].set_xdata(subtac['tip_x'])
+            contact_positions_l[0].set_ydata(subtac['tip_y'])
     
     # Get the whiskers for this frame
     if whiskers_file_handle is not None:
@@ -143,7 +153,7 @@ def write_video_with_overlays_from_data(output_filename,
     frame_triggers=None, trigger_dstart=-250, trigger_dstop=50,
     plot_trial_numbers=True,
     d_temporal=5, d_spatial=1,
-    dpi=50, output_fps=30, in_buff_sz=1500,
+    dpi=50, output_fps=30,
     input_video_alpha=1,
     whiskers_table=None, whiskers_file_handle=None, side='left',
     edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
@@ -174,7 +184,6 @@ def write_video_with_overlays_from_data(output_filename,
         input (keeping d_spatial in mind). But this dpi value affects font
         and marker size.
     output_fps : set the frame rate of the output video (ffmpeg -r)
-    in_buff_sz : Number of frames to load at once from the input
     input_video_alpha : alpha of image
     
     # Other sources of input
@@ -215,7 +224,13 @@ def write_video_with_overlays_from_data(output_filename,
 
     # Plot contact positions dynamically
     if contacts_table is not None:
-        contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
+        n_colors = 7
+        contact_colors = my.plot.generate_colorbar(n_colors)
+        contact_positions_l = []
+        for color in contact_colors:
+            contact_positions_l.append(
+                ax.plot([np.nan], [np.nan], '.', ms=15, color=color)[0])
+        #~ contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
 
     # Dynamic edge
     if edge_a is not None:
@@ -264,7 +279,7 @@ def write_video_with_overlays_from_data(output_filename,
         # Update the frame
         whisker_handles = frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
-            im2, edge_a_obj, contact_positions,
+            im2, edge_a_obj, contact_positions_l,
             d_spatial, d_temporal)
         plt.draw()
 
