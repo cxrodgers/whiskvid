@@ -197,6 +197,7 @@ def write_video_with_overlays_from_data(output_filename,
 
     # Parse the arguments
     frame_triggers = np.asarray(frame_triggers)
+    announced_frame_trigger = 0
 
     ## Set up the graphical handles
     if verbose:
@@ -271,9 +272,15 @@ def write_video_with_overlays_from_data(output_filename,
             nframe < nearest_choice + trigger_dstop):
             continue
 
+        # Announce
+        if ((announced_frame_trigger < len(frame_triggers)) and 
+            (nframe > frame_triggers[announced_frame_trigger] + trigger_dstart)):
+            print "Reached trigger for frame", frame_triggers[announced_frame_trigger]
+            announced_frame_trigger += 1
+
         # Update the trial text
-        if plot_trial_numbers and (nearest_choice_idx > trial_number):
-            txt.set_text('trial %d' % nearest_choice_idx)
+        if plot_trial_numbers:# and (nearest_choice_idx > trial_number):
+            txt.set_text('frame %d trial %d' % (nframe, nearest_choice_idx))
             trial_number = nearest_choice_idx
 
         # Update the frame
