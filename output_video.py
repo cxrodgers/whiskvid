@@ -296,6 +296,7 @@ def write_video_with_overlays_from_data(output_filename,
     
     ## Clean up
     whiskers_file_handle.close()
-    input_reader.close()
+    if not input_reader.isclosed():
+        input_reader.close()
     writer.close()
     plt.close('f')    
