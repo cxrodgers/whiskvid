@@ -160,7 +160,9 @@ def write_video_with_overlays_from_data(output_filename,
     input_video_alpha=1,
     whiskers_table=None, whiskers_file_handle=None, side='left',
     edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
-    contacts_table=None, post_contact_linger=100,
+    contacts_table=None, post_contact_linger=50,
+    write_stderr_to_screen=True,
+    input_frame_offset=0,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -188,10 +190,16 @@ def write_video_with_overlays_from_data(output_filename,
         and marker size.
     output_fps : set the frame rate of the output video (ffmpeg -r)
     input_video_alpha : alpha of image
+    input_frame_offset : If you already seeked this many frames in the
+        input_reader. Thus, now we know that the first frame to be read is
+        actually frame `input_frame_offset` in the source (and thus, in
+        the edge_a, contacts_table, etc.). This is the only parameter you
+        need to adjust in this case, not frame_triggers or anything else.
     
     # Other sources of input
     edge_alpha : alpha of edge
     post_contact_linger : How long to leave the contact displayed    
+        This is the total duration, so 0 will display nothing, and 1 is minimal.
     """
     # We need FFmpegWriter
     # Probably that object should be moved to my.video
@@ -256,10 +264,14 @@ def write_video_with_overlays_from_data(output_filename,
         frame_height=input_height/d_spatial,
         output_fps=output_fps,
         pix_fmt='argb',
+        write_stderr_to_screen=write_stderr_to_screen,
         )
     
     ## Loop until input frames exhausted
-    for nframe, frame in enumerate(input_reader.iter_frames()):
+    for nnframe, frame in enumerate(input_reader.iter_frames()):
+        # Account for the fact that we skipped the first input_frame_offset frames
+        nframe = nnframe + input_frame_offset
+        
         # Break if we're past the last trigger
         if nframe > np.max(frame_triggers) + trigger_dstop:
             break
@@ -302,4 +314,4 @@ def write_video_with_overlays_from_data(output_filename,
     if not input_reader.isclosed():
         input_reader.close()
     writer.close()
-    plt.close('f')    
+    plt.close(f)    
