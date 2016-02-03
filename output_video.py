@@ -45,8 +45,11 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     
     # Get the contacts
     if contacts_table is not None:
-        subtac = contacts_table[(contacts_table.frame < nframe) & 
-            (contacts_table.frame >= nframe - post_contact_linger)]
+        # Grab the contacts from frames (nframe - post_contact_linger, nframe]
+        subtac = contacts_table[
+            (contacts_table.frame <= nframe) & 
+            (contacts_table.frame > nframe - post_contact_linger)
+            ]
         
         # Split on group if it exists
         if 'group' in subtac.columns:
