@@ -1769,8 +1769,6 @@ def plot_edge_summary(session, ax=None, **kwargs):
     trial_matrix = everything['trial_matrix']
     trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
         db.loc[session, 'bfile'])
-    choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
-    trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)
 
     # Get hists
     typical_edges_hist2d = np.sum(everything['edge_summary']['H_l'], axis=0)
