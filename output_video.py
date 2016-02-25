@@ -246,7 +246,7 @@ def write_video_with_overlays_from_data(output_filename,
 
     # Dynamic edge
     if edge_a is not None:
-        edge_a_obj, = ax.plot([np.nan], [np.nan], 'g-')
+        edge_a_obj, = ax.plot([np.nan], [np.nan], '-', color='pink', lw=3)
     
     # Text of trial
     if plot_trial_numbers:
