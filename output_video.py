@@ -215,11 +215,18 @@ def write_video_with_overlays_from_data(output_filename,
         print "setting up handles"
 
     # Create a figure with an image that fills it
-    figsize = input_width / dpi, input_height / dpi
+    # We want the figsize to be in inches, so divide by dpi
+    # And we want one invisible axis containing an image that fills the whole figure
+    figsize = input_width / float(dpi), input_height / float(dpi)
     f = plt.figure(frameon=False, dpi=dpi/d_spatial, figsize=figsize)
-    canvas_width, canvas_height = f.canvas.get_width_height()
     ax = f.add_axes([0, 0, 1, 1])
     ax.axis('off')
+    
+    # This return results in pixels, so should be the same as input width
+    # and height. If not, probably rounding error above
+    canvas_width, canvas_height = f.canvas.get_width_height()
+    if input_width != canvas_width or input_height != canvas_height:
+        raise ValueError("canvas size is not the same as input size")
 
     # Plot typical edge images as static alpha
     if typical_edges_hist2d is not None:
@@ -243,10 +250,14 @@ def write_video_with_overlays_from_data(output_filename,
             contact_positions_l.append(
                 ax.plot([np.nan], [np.nan], '.', ms=15, color=color)[0])
         #~ contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
+    else:
+        contact_positions_l = None
 
     # Dynamic edge
     if edge_a is not None:
         edge_a_obj, = ax.plot([np.nan], [np.nan], '-', color='pink', lw=3)
+    else:
+        edge_a_obj = None
     
     # Text of trial
     if plot_trial_numbers:
