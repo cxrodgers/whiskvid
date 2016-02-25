@@ -986,6 +986,19 @@ def get_whisker_ends_hdf5(hdf5_file=None, side=None,
         new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
         new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
         summary = new_summary
+    elif side == 'right':
+        # Like left, but x is switched
+        
+        # Identify which are backwards
+        switch_mask = summary['tip_x'] > summary['fol_x']
+        
+        # Switch those rows
+        new_summary = summary.copy()
+        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
+        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
+        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
+        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
+        summary = new_summary        
     elif side == 'top':
         # Identify which are backwards (0 at the top (?))
         switch_mask = summary['tip_y'] < summary['fol_y']
