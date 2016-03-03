@@ -1310,6 +1310,8 @@ def calculate_contacts_manual_params_db(session, **kwargs):
     row = db.ix[session]
     
     # Get manual params
+    if pandas.isnull(row['vfile']):
+        raise ValueError("vfile is null for session %s" % session)
     params = calculate_contacts_manual_params(row['vfile'], interactive=True, 
         **kwargs)
     for key, value in params.items():
@@ -1320,6 +1322,8 @@ def calculate_contacts_manual_params_db(session, **kwargs):
 
 def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
     """Display a subset of video frames to set fol_x and fol_y"""
+    if pandas.isnull(vfile):
+        raise ValueError("vfile is null")
     res = my.video.choose_rectangular_ROI(vfile, n_frames=n_frames, 
         interactive=interactive)
     
