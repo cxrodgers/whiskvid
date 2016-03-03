@@ -64,7 +64,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             contact_positions_l[0].set_ydata(subtac['tip_y'])
     
     # Get the whiskers for this frame
-    if whiskers_file_handle is not None:
+    if whiskers_table is not None and whiskers_file_handle is not None:
         # Remove old whiskers
         for handle in whisker_handles:
             handle.remove()
@@ -86,7 +86,9 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
 
 def write_video_with_overlays(output_filename, 
     input_reader, input_width, input_height, verbose=True,
-    whiskers_filename=None, edges_filename=None, contacts_filename=None,
+    whiskers_filename=None, whiskers_table=None,
+    whiskers_file_handle=None,
+    edges_filename=None, contacts_filename=None,
     contacts_table=None,
     **kwargs):
     """Creating a video overlaid with whiskers, contacts, etc.
@@ -100,6 +102,8 @@ def write_video_with_overlays(output_filename,
         See write_video_with_overlays_from_data
     
     whiskers_filename : name of HDF5 table containing whiskers
+        If whiskers_filename is None, then you can provide whiskers_table
+        AND whiskers_file_handle explicitly.
     edges_filename : name of file containing edges
     contacts_filename : HDF5 file containing contact info    
     contacts_table : pre-loaded or pre-calculated contacts table
@@ -119,8 +123,6 @@ def write_video_with_overlays(output_filename,
         # and foll
         whiskers_table = pandas.DataFrame.from_records(
             whiskers_file_handle.root.summary.read())
-    else:
-        whiskers_file_handle = None
     
     # Load contacts
     if contacts_table is None:
@@ -163,6 +165,7 @@ def write_video_with_overlays_from_data(output_filename,
     contacts_table=None, post_contact_linger=50,
     write_stderr_to_screen=True,
     input_frame_offset=0,
+    get_extra_text=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -200,6 +203,11 @@ def write_video_with_overlays_from_data(output_filename,
     edge_alpha : alpha of edge
     post_contact_linger : How long to leave the contact displayed    
         This is the total duration, so 0 will display nothing, and 1 is minimal.
+    
+    # Misc
+    get_extra_text : if not None, should be a function that accepts a frame
+        number and returns some text to add to the display. This is a 
+        "real" frame number after accounting for any offset.
     """
     # We need FFmpegWriter
     # Probably that object should be moved to my.video
@@ -225,7 +233,9 @@ def write_video_with_overlays_from_data(output_filename,
     # This return results in pixels, so should be the same as input width
     # and height. If not, probably rounding error above
     canvas_width, canvas_height = f.canvas.get_width_height()
-    if input_width != canvas_width or input_height != canvas_height:
+    if \
+        input_width / d_spatial != canvas_width or \
+        input_height / d_spatial != canvas_height:
         raise ValueError("canvas size is not the same as input size")
 
     # Plot typical edge images as static alpha
@@ -306,7 +316,11 @@ def write_video_with_overlays_from_data(output_filename,
 
         # Update the trial text
         if plot_trial_numbers:# and (nearest_choice_idx > trial_number):
-            txt.set_text('frame %d trial %d' % (nframe, nearest_choice_idx))
+            if get_extra_text is not None:
+                extra_text = get_extra_text(nframe)
+            else:
+                extra_text = ''
+            txt.set_text('frame %d trial %d %s' % (nframe, nearest_choice_idx, extra_text))
             trial_number = nearest_choice_idx
 
         # Update the frame
@@ -321,7 +335,8 @@ def write_video_with_overlays_from_data(output_filename,
         writer.write_bytes(string_bytes)
     
     ## Clean up
-    whiskers_file_handle.close()
+    if whiskers_file_handle is not None:
+        whiskers_file_handle.close()
     if not input_reader.isclosed():
         input_reader.close()
     writer.close()
