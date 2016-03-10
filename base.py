@@ -16,7 +16,10 @@
         Same as above but save to db
 * Plotting stuff, basically part of the pipeline
 """
-import traj, trace
+try:
+    import traj, trace
+except ImportError:
+    pass
 import numpy as np, pandas
 import os
 import scipy.ndimage
@@ -1267,40 +1270,11 @@ def sync_with_behavior(session, light_delta=75, diffsize=2, refrac=50,
 def sync_with_behavior_nodb(video_file, bfile, light_delta, diffsize, refrac):
     """Sync video with behavioral file
     
-    Uses decrements in luminance and the backlight signal to do the sync.
-    Assumes the backlight decrement is at the time of entry to state 1.
-    
-    The luminance signal will be inverted in order to detect decrements.
-    Assumes video frame rates is 30fps, regardless of actual frame rate.
-    And fits the behavior to the video based on that.
-    
-    See BeWatch.syncing.extract_onsets_and_durations for details on kwargs.
+    This got moved to BeWatch.syncing
     """    
-    # Get the mean luminances
-    # Would this be significantly faster if we spatially downsampled?
-    # Or used ffmpeg's native calculations?
-    print "loading luminances ... this will take a while"
-    lums = my.video.process_chunks_of_video(video_file, n_frames=np.inf)
-
-    # Get onsets and durations
-    onsets, durations = BeWatch.syncing.extract_onsets_and_durations(-lums, 
-        delta=light_delta, diffsize=diffsize, refrac=refrac)
-
-    # Convert to seconds in the spurious timebase
-    v_onsets = onsets / 30.
-
-    # Get the data from Ardulines
-    lines = ArduFSM.TrialSpeak.read_lines_from_file(bfile)
-    parsed_df_by_trial = \
-        ArduFSM.TrialSpeak.parse_lines_into_df_split_by_trial(lines)
-
-    # Find the time of transition into inter_trial_interval (13)
-    backlight_times = ArduFSM.TrialSpeak.identify_state_change_times(
-        parsed_df_by_trial, state1=1, show_warnings=True)
-
-    # Find the fit
-    b2v_fit = BeWatch.syncing.longest_unique_fit(v_onsets, backlight_times)    
-    return b2v_fit
+    return BeWatch.syncing.sync_video_with_behavior(bfile=bfile,
+        lums=None, video_file=video_file, light_delta=light_delta,
+        diffsize=diffsize, refrac=refrac, assumed_fps=30.)
 
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):

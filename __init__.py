@@ -12,8 +12,12 @@ names (and no __init__.py), so probably put it on the end of the path.
 # This will trigger a load of default.parameters, always in the directory
 # in which the calling script lives, NOT the module directory.
 # How to fix that??
-import traj
-import trace
+
+try:
+    import traj
+    import trace
+except ImportError:
+    pass
 
 import db
 
