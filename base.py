@@ -326,6 +326,23 @@ def get_bottom_edge(object_mask):
             contour.append((true_rows[-1], ncol))
     return np.asarray(contour)
 
+def get_top_edge(object_mask):
+    """Return the top edge of the object.
+    
+    Currently, for each column, we take the top most nonzero value. We
+    return (row, col) for each such pixel. However, this doesn't work for
+    vertical parts of the edge.
+    """
+    contour = []
+    for ncol, col in enumerate(object_mask.T):
+        true_rows = np.where(col)[0]
+        if len(true_rows) == 0:
+            continue
+        else:
+            contour.append((true_rows[0], ncol))
+    return np.asarray(contour)
+
+
 def plot_all_objects(objects, nobjects):
     f, axa = plt.subplots(1, nobjects)
     for object_id in range(nobjects):
@@ -463,6 +480,8 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         edge_getter = get_bottom_edge
     elif side == 'top':
         edge_getter = get_left_edge
+    elif side == 'right':
+        edge_getter = get_top_edge
     else:
         raise ValueError("side must be left or top, instead of %r" % side)
     
@@ -600,7 +619,7 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     def keep_roi(frame):
         height, width = frame.shape
         return frame[:int(0.5 * height), int(0.5 * width):]
-    frames_a = my.video.process_chunks_of_video(video_file, n_frames=10000,
+    frames_a = my.video.process_chunks_of_video(video_file, n_frames=3000,
         func='keep', frame_chunk_sz=1000, verbose=True, finalize='listcomp')
     idxs = np.argsort([keep_roi(frame).min() for frame in frames_a])
 
@@ -828,8 +847,9 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7,
         
         # Plot the frame
         im = my.plot.imshow(frame, ax=ax, axis_call='image', 
-            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
-        
+            cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
+        im.set_clim((0, 255))
+
         # Plot the edge
         if edge is not None:
             ax.plot(edge[:, 1], edge[:, 0], 'g-', lw=5)
@@ -837,7 +857,7 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7,
         # Plot the binframe
         ax2 = axa2.flatten()[nax]
         im2 = my.plot.imshow(binframe, ax=ax2, axis_call='image',
-            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+            cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
         
         # Plot the best object
         ax.set_title("t=%0.1f %s" % (
