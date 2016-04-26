@@ -1605,6 +1605,7 @@ def make_overlay_image(session, db=None, verbose=True, ax=None):
     behavior_filename = db.loc[session, 'bfile']
     lines = ArduFSM.TrialSpeak.read_lines_from_file(db.loc[session, 'bfile'])
     trial_matrix = ArduFSM.TrialSpeak.make_trials_matrix_from_logfile_lines2(lines)
+    trial_matrix = ArduFSM.TrialSpeak.translate_trial_matrix(trial_matrix)
     #~ trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(behavior_filename)
     video_filename = db.loc[session, 'vfile']
     b2v_fit = [db.loc[session, 'fit_b2v0'], db.loc[session, 'fit_b2v1']]
@@ -1669,7 +1670,7 @@ def make_overlay_image_nodb(behavior_filename, video_filename,
 
     # Calculate sess_meaned_frames
     sess_meaned_frames = BeWatch.overlays.calculate_sess_meaned_frames(
-        trial_number2frame, trial_matrix)
+        trialnum2frame, trial_matrix)
 
     #~ # Save trial_frames_by_type
     #~ whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename, resdf)
