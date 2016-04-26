@@ -1595,8 +1595,22 @@ def make_overlay_image(session, db=None, verbose=True, ax=None):
     
     This is a wrapper around make_overlay_image_nodb that extracts metadata
     and works with the db.
+
+    Calculates, saves, and returns the following:
     
-    Returns: trial_frames_by_type, trial_frames_all_types
+    sess_meaned_frames : pandas dataframe
+        containing the meaned image over all trials of each type
+        AKA TrialFramesByType
+    
+    overlay_image_name : 3d color array of the overlays
+        This is the sum of all the types in trial_frames_by_type, colorized
+        by rewarded side.
+        AKA TrialFramesAllTypes
+    
+    trialnum2frame : dict of trial number to frame
+
+    
+    Returns: trialnum2frame, sess_meaned_frames, C
     """
     if db is None:
         db = whiskvid.db.load_db()    
@@ -1606,15 +1620,8 @@ def make_overlay_image(session, db=None, verbose=True, ax=None):
     lines = ArduFSM.TrialSpeak.read_lines_from_file(db.loc[session, 'bfile'])
     trial_matrix = ArduFSM.TrialSpeak.make_trials_matrix_from_logfile_lines2(lines)
     trial_matrix = ArduFSM.TrialSpeak.translate_trial_matrix(trial_matrix)
-    #~ trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(behavior_filename)
     video_filename = db.loc[session, 'vfile']
     b2v_fit = [db.loc[session, 'fit_b2v0'], db.loc[session, 'fit_b2v1']]
-    #~ frame_dir = db.loc[session, 'frames']
-
-    # Error check
-    # Should this be a cascading call to dump_frames?
-    #~ if pandas.isnull(frame_dir) or not os.path.exists(frame_dir):
-        #~ raise ValueError("frames must be dumped before making overlays")
 
     def get_or_generate_filename(file_class):
         db_changed = False
@@ -1626,47 +1633,66 @@ def make_overlay_image(session, db=None, verbose=True, ax=None):
         
         return filename, db_changed
 
-    #~ # Set up filenames for each
-    #~ overlay_image_name, db_changed1 = get_or_generate_filename(
-        #~ whiskvid.db.TrialFramesAllTypes)
-    #~ trial_frames_by_type_filename, db_changed2 = get_or_generate_filename(
-        #~ whiskvid.db.TrialFramesByType)
+    # Set up filenames for each
+    overlay_image_name, db_changed1 = get_or_generate_filename(
+        whiskvid.db.TrialFramesAllTypes)
+    trial_frames_by_type_filename, db_changed2 = get_or_generate_filename(
+        whiskvid.db.TrialFramesByType)
+    trialnum2frame_filename = os.path.join(db.loc[session, 'session_dir'],
+        'trialnum2frame.pickle')
+
+    # Load from cache if possible
+    if os.path.exists(trialnum2frame_filename):
+        if verbose:
+            print "loading cached trialnum2frame"
+        trialnum2frame = my.misc.pickle_load(trialnum2frame_filename)
+    else:
+        trialnum2frame = None
 
     # Call make_overlay_image_nodb
-    sess_meaned_frames, C = make_overlay_image_nodb(
+    trialnum2frame, sess_meaned_frames, C = make_overlay_image_nodb(
+        trialnum2frame,
         behavior_filename, video_filename, 
         b2v_fit, trial_matrix, verbose=verbose, ax=ax)
     
-    # Save db
-    #~ if db_changed1 or db_changed2:
-        #~ whiskvid.db.save_db(db)     
-    #~ else:
-        #~ print "no changes made to overlay filenames in db for", session    
+    # Save
+    my.misc.pickle_dump(trialnum2frame, trialnum2frame_filename)
+    whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename,
+        sess_meaned_frames)
+    whiskvid.db.TrialFramesAllTypes.save(overlay_image_name,
+        C)
     
-    return sess_meaned_frames, C
+    # Update db
+    db = whiskvid.db.load_db()    
+    db.loc[session, 'overlays'] = trial_frames_by_type_filename
+    db.loc[session, 'frames'] = trialnum2frame_filename
+    db.loc[session, 'overlay_image'] = overlay_image_name
+    whiskvid.db.save_db(db)     
     
-def make_overlay_image_nodb(behavior_filename, video_filename, 
-    b2v_fit, trial_matrix, verbose=True, ax=None):
+    return trialnum2frame, sess_meaned_frames, C
+    
+def make_overlay_image_nodb(trialnum2frame=None,
+    behavior_filename=None, video_filename=None, 
+    b2v_fit=None, trial_matrix=None, verbose=True, ax=None):
     """Make overlays of shapes to show positioning.
     
     Wrapper over the methods in BeWatch.overlays
-    
-    trial_frames_by_type_filename : where to save the pandas dataframe
-        containing the meaned image over all trials of each type
-    overlay_image_name : where to save the 3d color array of the overlays
-        This is the sum of all the types in trial_frames_by_type, colorized
-        by rewarded side.
-    trial_matrix : the trial matrix
-    
-    In addition to saving them to disk, this also returns:
-        sess_meaned_frames (DataFrame), C (array)
+
+    trialnum2frame : if known
+        Otherwise, provide behavior_filename, video_filename, and b2v_fit
+
+    Returns:
+        trialnum2frame, sess_meaned_frames (DataFrame), C (array)
     """
     # Get trialnum2frame
-    trialnum2frame = BeWatch.overlays.extract_frames_at_retraction_times(
-        behavior_filename=behavior_filename, 
-        video_filename=video_filename, 
-        b2v_fit=b2v_fit, 
-        verbose=verbose)
+    if trialnum2frame is None:
+        if verbose:
+            print "calculating trialnum2frame"
+        trialnum2frame = BeWatch.overlays.extract_frames_at_retraction_times(
+            behavior_filename=behavior_filename, 
+            video_filename=video_filename, 
+            b2v_fit=b2v_fit, 
+            verbose=verbose)
 
     # Calculate sess_meaned_frames
     sess_meaned_frames = BeWatch.overlays.calculate_sess_meaned_frames(
@@ -1683,7 +1709,7 @@ def make_overlay_image_nodb(behavior_filename, video_filename,
     C = BeWatch.overlays.make_overlay(sess_meaned_frames, ax, meth='all')
     #~ whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
     
-    return sess_meaned_frames, C
+    return trialnum2frame, sess_meaned_frames, C
 ## End overlays
 
 
