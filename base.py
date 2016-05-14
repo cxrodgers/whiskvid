@@ -1339,13 +1339,13 @@ def calculate_contacts_session(session, db=None, **kwargs):
     if pandas.isnull(row['tac']):
         db.loc[session, 'tac'] = whiskvid.db.Contacts.generate_name(
             row['session_dir'])
+        whiskvid.db.save_db(db)
+    
     tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
         tac_filename=db.loc[session, 'tac'], 
         fol_range_x=(db.loc[session, 'fol_x0'], db.loc[session, 'fol_x1']),
         fol_range_y=(db.loc[session, 'fol_y0'], db.loc[session, 'fol_y1']),
         **kwargs)
-    
-    whiskvid.db.save_db(db)
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
@@ -1404,6 +1404,32 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
+
+
+def get_masked_whisker_ends(h5_filename, side, 
+    fol_range_x, fol_range_y, length_thresh=75, 
+    verbose=True):
+    """Return a table of whiskers that has been masked by follicle and length
+    
+    """
+    # Get the ends
+    resdf = get_whisker_ends_hdf5(h5_filename, side=side)
+    if verbose:
+        print "whisker rows: %d" % len(resdf)
+
+    # Drop everything < thresh
+    resdf = resdf[resdf['length'] >= length_thresh]
+    if verbose:
+        print "whisker rows after length: %d" % len(resdf)
+
+    # Follicle mask
+    resdf = resdf[
+        (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
+        (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
+    if verbose:
+        print "whisker rows after follicle mask: %d" % len(resdf)    
+    
+    return resdf
 
 def purge_tac(session, db=None):
     """Delete the tac"""
@@ -1789,7 +1815,6 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         my.plot.rescue_tick(ax=ax, x=4, y=4)
     else:
         raise ValueError("bad versus: %s" % versus)
-
     plt.show()
     
     return ax
