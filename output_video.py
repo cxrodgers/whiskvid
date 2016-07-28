@@ -328,9 +328,9 @@ def write_video_with_overlays_from_data(output_filename,
             post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
             im2, edge_a_obj, contact_positions_l,
             d_spatial, d_temporal)
-        plt.draw()
-
+        
         # Write to pipe
+        f.canvas.draw()
         string_bytes = f.canvas.tostring_argb()
         writer.write_bytes(string_bytes)
     
