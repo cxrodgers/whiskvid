@@ -1259,7 +1259,7 @@ def trace_session_nodb(h5_filename, tiffs_to_trace_directory,
         )
 
 ## Syncing
-def sync_with_behavior(session, light_delta=75, diffsize=2, refrac=50, 
+def sync_with_behavior(session, light_delta=30, diffsize=2, refrac=50, 
     **kwargs):
     """Sync video with behavioral file and store in db
     
@@ -1294,7 +1294,8 @@ def sync_with_behavior_nodb(video_file, bfile, light_delta, diffsize, refrac):
     """    
     return BeWatch.syncing.sync_video_with_behavior(bfile=bfile,
         lums=None, video_file=video_file, light_delta=light_delta,
-        diffsize=diffsize, refrac=refrac, assumed_fps=30.)
+        diffsize=diffsize, refrac=refrac, assumed_fps=30.,
+        error_if_no_fit=True)
 
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):
