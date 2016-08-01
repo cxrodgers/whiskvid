@@ -217,6 +217,8 @@ def write_video_with_overlays_from_data(output_filename,
     # Parse the arguments
     frame_triggers = np.asarray(frame_triggers)
     announced_frame_trigger = 0
+    input_width = int(input_width)
+    input_height = int(input_height)
 
     ## Set up the graphical handles
     if verbose:
