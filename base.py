@@ -678,7 +678,9 @@ def edge_frames(session, db=None, debug=False, **kwargs):
     # Generate output file name
     if pandas.isnull(db.loc[session, 'edge']):
         output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
-        db.loc[session, 'edge'] = output_file
+    else:
+        print "already edged, returning"
+        return
     
     # A better default for side
     if 'side' in kwargs:
@@ -699,17 +701,20 @@ def edge_frames(session, db=None, debug=False, **kwargs):
     # Depends on debug
     if debug:
         frames, edge_a = edge_frames_nodb(
-            row['vfile'], db.loc[session, 'edge'], side=side, debug=True,
+            row['vfile'], output_file, side=side, debug=True,
             **kwargs)
         
         return frames, edge_a
     else:
         edge_frames_nodb(
-            row['vfile'], db.loc[session, 'edge'], side=side, debug=False,
+            row['vfile'], output_file, side=side, debug=False,
             **kwargs)
+    
+    # Update the db
+    db = whiskvid.db.load_db()
+    db.loc[session, 'edge'] = output_file
+    whiskvid.db.save_db(db)      
 
-        # Save
-        whiskvid.db.save_db(db)  
 
 def edge_frames_nodb(video_file, edge_file, 
     lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
