@@ -16,7 +16,7 @@ class OutOfFrames(BaseException):
 def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
     im2, edge_a_obj, contact_positions_l,
-    d_spatial, d_temporal):
+    d_spatial, d_temporal, contact_colors):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -30,6 +30,15 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     Returns: whisker_handles
         These are returned so that they can be deleted next time
     """
+    # figure out what the frame column is called
+    if whiskers_table is not None:
+        if 'frame' in whiskers_table.columns:
+            FRAME_LABEL = 'frame'
+        else:
+            FRAME_LABEL = 'time'
+        if FRAME_LABEL not in whiskers_table:
+            raise ValueError("cannot find the frame column in the whiskers table")
+    
     # Get the frame
     im2.set_data(frame[::d_spatial, ::d_spatial])
     
@@ -70,12 +79,16 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             handle.remove()
         whisker_handles = []            
         
-        sub_summary = whiskers_table[whiskers_table.time == nframe]
+        sub_summary = whiskers_table[whiskers_table[FRAME_LABEL] == nframe]
         for idx, row in sub_summary.iterrows():
+            if 'color_group' in row:
+                color = contact_colors[row['color_group']]
+            else:
+                color = 'yellow'
             line, = ax.plot(
                 whiskers_file_handle.root.pixels_x[idx],
                 whiskers_file_handle.root.pixels_y[idx],
-                color='yellow')
+                color=color)
             whisker_handles.append(line)
             #~ line, = ax.plot([row['fol_x']], [row['fol_y']], 'gs')
             #~ whisker_handles.append(line)
@@ -166,6 +179,7 @@ def write_video_with_overlays_from_data(output_filename,
     write_stderr_to_screen=True,
     input_frame_offset=0,
     get_extra_text=None,
+    contact_colors=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -208,6 +222,7 @@ def write_video_with_overlays_from_data(output_filename,
     get_extra_text : if not None, should be a function that accepts a frame
         number and returns some text to add to the display. This is a 
         "real" frame number after accounting for any offset.
+    contact_colors : list of color specs to use
     """
     # We need FFmpegWriter
     # Probably that object should be moved to my.video
@@ -219,6 +234,10 @@ def write_video_with_overlays_from_data(output_filename,
     announced_frame_trigger = 0
     input_width = int(input_width)
     input_height = int(input_height)
+
+    if contact_colors is None:
+        n_colors = 7
+        contact_colors = my.plot.generate_colorbar(n_colors)
 
     ## Set up the graphical handles
     if verbose:
@@ -255,8 +274,6 @@ def write_video_with_overlays_from_data(output_filename,
 
     # Plot contact positions dynamically
     if contacts_table is not None:
-        n_colors = 7
-        contact_colors = my.plot.generate_colorbar(n_colors)
         contact_positions_l = []
         for color in contact_colors:
             contact_positions_l.append(
@@ -329,7 +346,7 @@ def write_video_with_overlays_from_data(output_filename,
         whisker_handles = frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
             im2, edge_a_obj, contact_positions_l,
-            d_spatial, d_temporal)
+            d_spatial, d_temporal, contact_colors)
         
         # Write to pipe
         f.canvas.draw()
