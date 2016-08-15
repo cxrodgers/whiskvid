@@ -61,8 +61,15 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             ]
         
         # Split on group if it exists
-        if 'group' in subtac.columns:
-            # Add a color column
+        if 'color_group' in subtac.columns:
+            # We've already decided how to color the contacts
+            for ncolor, contact_positions in enumerate(contact_positions_l):
+                subsubtac = subtac[subtac['color_group'] == ncolor]
+                contact_positions.set_xdata(subsubtac['tip_x'])
+                contact_positions.set_ydata(subsubtac['tip_y'])            
+        elif 'group' in subtac.columns:
+            # We've grouped the contacts but haven't decided how to
+            # color them yet
             for ncolor, contact_positions in enumerate(contact_positions_l):
                 subsubtac = subtac[
                     subtac['group'].mod(len(contact_positions_l)) == ncolor]
@@ -82,7 +89,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
         sub_summary = whiskers_table[whiskers_table[FRAME_LABEL] == nframe]
         for idx, row in sub_summary.iterrows():
             if 'color_group' in row:
-                color = contact_colors[row['color_group']]
+                color = contact_colors[int(row['color_group'])]
             else:
                 color = 'yellow'
             line, = ax.plot(
