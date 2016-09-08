@@ -127,6 +127,12 @@ class EdgesAll(FileFinder):
 class WhiskersHDF5(FileFinder):
     """Finds HDF5-formatted whiskers file"""
     glob_pattern = '*.wseg.h5'
+    
+    @classmethod
+    def generate_name(self, dirname):
+        """Generates a name for the whiskers HDF5 file"""
+        probable_session_name = os.path.split(dirname)[1]
+        return os.path.join(dirname, probable_session_name + '.wseg.h5')        
 
 class Contacts(FileFinder):
     """Finds dataframe of contact times and locations"""
@@ -372,6 +378,12 @@ def rescan_db():
                 db.loc[session, 'session_dir'])
             db_changed = True
         
+        vfile_fn = db.loc[session, 'vfile']
+        if pandas.isnull(vfile_fn) or not os.path.exists(vfile_fn):
+            db.loc[session, 'vfile'] = RawVideo.find(
+                db.loc[session, 'session_dir'])
+            db_changed = True        
+        
         if pandas.isnull(db.loc[session, 'date_s']):
             print "setting date_s for %s to %s" % (session, session[:6])
             db.loc[session, 'date_s'] = session[:6]
@@ -387,27 +399,45 @@ def generate_session_name(input_file):
     """Given a source video file, generate the session name"""
     return os.path.splitext(os.path.split(os.path.abspath(input_file))[1])[0]
 
-def create_session_directory(input_file, session, verbose=True):
+def create_session_directory(input_file=None, matfile_directory=None,
+    session=None, verbose=True):
     """Create a new session directory with an input file and parameters
     
-    input_file : video file to become the sources of the new session
+    This creates a directory named `session` within ROOT_DIR. The
+    tracing parameters are copied into that directory.
+    
+    Finally a row is created in the db containing paths to the session
+    directory, root directory, matfile directory, input file, and date_s.
+    
+    input_file : video file to trace. If None, must provide matfile_directory.
+    matfile_directory : directory containing modulated matfiles
     session : name of the session, typically generated with 
         generate_session_name
-    
-    A directory named `session` will be created within ROOT_DIR.
-    The db will be updated and saved.
     """
     db = load_db()
-    session_dir = create_session_directory_nodb(input_file, session, 
-        verbose=verbose)
+    
+    # Create the directory
+    session_dir = create_session_directory_nodb(session, verbose=verbose)
+    
+    # Set the source in the db
+    if input_file is not None:
+        # Input is a video file
+        db.loc[session, 'input_vfile'] = input_file
+    else:
+        # Input is a directory of matfiles
+        if matfile_directory is None:
+            raise ValueError("must specify input vfile or matfile directory")
+        db.loc[session, 'matfile_directory'] = matfile_directory
+    
+    # Store the location of the session and root
     db.loc[session, 'session_dir'] = session_dir
     db.loc[session, 'root_dir'] = ROOT_DIR
-    db.loc[session, 'input_vfile'] = input_file
+    db.loc[session, 'date_s'] = session[:6]
+    
     save_db(db)
 
-def create_session_directory_nodb(input_file, session, root_dir=ROOT_DIR,
-    verbose=True):
-    """Create a new session directory with an input file and parameters"""
+def create_session_directory_nodb(session, root_dir=ROOT_DIR, verbose=True):
+    """Creates a new session directory with parameters file"""
     # Create a session directory
     session_dir = os.path.join(root_dir, session)
     if os.path.exists(session_dir):
@@ -427,8 +457,11 @@ def create_session_directory_nodb(input_file, session, root_dir=ROOT_DIR,
 
 def find_closest_bfile(date_string, 
     behavior_dir='/home/chris/runmice/L0/logfiles'):
-    """Given a date string like 150313, find the bfile from that day"""
-    bfile_l = glob.glob(os.path.join(behavior_dir, 'ardulines.*%s*.*' % 
+    """Given a date string like 150313, find the bfile from that day
+    
+    This prepends "20" so it would look for 20150313.
+    """
+    bfile_l = glob.glob(os.path.join(behavior_dir, 'ardulines.*20%s*.*' % 
         date_string))
     
     try:
@@ -458,7 +491,8 @@ def save_db(db, filename='/home/chris/dev/whisker_db/db.csv'):
     db.to_csv(filename)
 
 def load_db(filename='/home/chris/dev/whisker_db/db.csv'):
-    return pandas.read_csv(filename, index_col='session')
+    return pandas.read_csv(filename, index_col='session',
+        converters={'date_s': str})
 
 def flush_db(filename='/home/chris/dev/whisker_db/db.csv'):
     db = create_db_from_root_dir(savename=filename)

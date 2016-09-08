@@ -27,6 +27,7 @@ import my
 import ArduFSM
 import BeWatch
 import whiskvid
+import WhiskiWrap
 import matplotlib.pyplot as plt
 try:
     import tables
@@ -325,23 +326,50 @@ def get_bottom_edge(object_mask):
             contour.append((true_rows[-1], ncol))
     return np.asarray(contour)
 
+def get_top_edge(object_mask):
+    """Return the top edge of the object.
+    
+    Currently, for each column, we take the top most nonzero value. We
+    return (row, col) for each such pixel. However, this doesn't work for
+    vertical parts of the edge.
+    """
+    contour = []
+    for ncol, col in enumerate(object_mask.T):
+        true_rows = np.where(col)[0]
+        if len(true_rows) == 0:
+            continue
+        else:
+            contour.append((true_rows[0], ncol))
+    return np.asarray(contour)
+
+
 def plot_all_objects(objects, nobjects):
     f, axa = plt.subplots(1, nobjects)
     for object_id in range(nobjects):
         axa[object_id].imshow(objects == object_id)
     plt.show()
 
-def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
+def find_edge_of_shape(frame, 
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
+    lum_threshold=30, roi_x=(320, 640),
     roi_y=(0, 480), size_threshold=1000, edge_getter=get_bottom_edge,
     meth='largest_in_roi', split_iters=10, debug=False):
     """Find the left edge of the shape in frame.
     
     This is a wrapper around the other utility functions
     
+    0. Crops image. The purpose of this is to remove dark spots that may
+      be contiguous with the shape. For instance, dark border of frame, or
+      mouse face, or pipes.
     1. Thresholds image to find dark spots
     2. Segments the dark spots using scipy.ndimage.label
     3. Chooses the largest dark spot within the ROI
     4. Finds the left edge of this spot
+    
+    crop_x0 : ignore all pixels to the left of this value
+    crop_x1 : ignore all pixels to the right of this value
+    crop_y0 : ignore all pixels above (less than) this value
+    crop_y1 : ignore all pixels below (greater than) this value
     
     meth: largest_with_centroid_in_roi, largest_in_roi
     
@@ -354,6 +382,16 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
     """
     # Segment image
     binframe = frame < lum_threshold
+    
+    # Force the area that is outside the crop to be 0 (ignored)
+    if crop_x0 is not None:
+        binframe[:, :crop_x0] = 0
+    if crop_x1 is not None:
+        binframe[:, crop_x1:] = 0
+    if crop_y0 is not None:
+        binframe[:crop_y0, :] = 0
+    if crop_y1 is not None:
+        binframe[crop_y1:, :] = 0
     
     # Split apart the pipes and the shape
     opened_binframe = scipy.ndimage.morphology.binary_opening(
@@ -408,6 +446,7 @@ def find_edge_of_shape(frame, lum_threshold=30, roi_x=(320, 640),
         return edge
 
 def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
     lum_threshold=50, roi_x=(200, 500), roi_y=(0, 400),
     return_frames_instead=False, meth='largest_in_roi', split_iters=10,
     side='left', debug=False, debug_frametimes=None):
@@ -441,6 +480,8 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         edge_getter = get_bottom_edge
     elif side == 'top':
         edge_getter = get_left_edge
+    elif side == 'right':
+        edge_getter = get_top_edge
     else:
         raise ValueError("side must be left or top, instead of %r" % side)
     
@@ -448,7 +489,10 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
         # Helper function to pass to process_chunks_of_video
         def mapfunc(frame):
             """Gets the edge from each frame"""
-            edge = find_edge_of_shape(frame, lum_threshold=lum_threshold,
+            edge = find_edge_of_shape(frame, 
+                crop_x0=crop_x0, crop_x1=crop_x1, 
+                crop_y0=crop_y0, crop_y1=crop_y1,
+                lum_threshold=lum_threshold,
                 roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
                 meth=meth, split_iters=split_iters)
             if edge is None:
@@ -484,6 +528,8 @@ def get_all_edges_from_video(video_file, n_frames=np.inf, verbose=True,
             # Compute the edge and intermediate results
             binframe, best_object, edge, status = find_edge_of_shape(
                 frame, lum_threshold=lum_threshold,
+                crop_x0=crop_x0, crop_x1=crop_x1, 
+                crop_y0=crop_y0, crop_y1=crop_y1,                
                 roi_x=roi_x, roi_y=roi_y, edge_getter=edge_getter,
                 meth=meth, split_iters=split_iters, debug=True)
             
@@ -552,16 +598,30 @@ def edge_frames_manual_params_db(session, interactive=True, **kwargs):
 
 
 def edge_frames_manual_params(video_file, interactive=True, **kwargs):
+    """Interactively set the parameters for edging.
+    
+    Takes the first 10000 frames of the video. Sorts the frames by those
+    that have minimal intensity in the upper right corner. Plots a subset
+    of those. (This all assumes dark shapes coming in from the upper right.)
+    
+    This heatmap view allows the user to visualize the typical luminance of
+    the shape, to set lumthresh.
+    
+    Then calls choose_rectangular_ROI so that the user can interactively set
+    the ROI that always includes some part of the shape and never includes
+    the face.
+    
+    Finally the user inputs the face side.
+    """
     width, height = my.video.get_video_aspect(video_file)
     
     # Try to find a frame with a good example of a shape
     def keep_roi(frame):
         height, width = frame.shape
         return frame[:int(0.5 * height), int(0.5 * width):]
-    frames_a = my.video.process_chunks_of_video(video_file, n_frames=10000,
+    frames_a = my.video.process_chunks_of_video(video_file, n_frames=3000,
         func='keep', frame_chunk_sz=1000, verbose=True, finalize='listcomp')
     idxs = np.argsort([keep_roi(frame).min() for frame in frames_a])
-    best_frame = frames_a[idxs[0]]
 
     # Plot it so we can set params
     f, axa = plt.subplots(3, 3)
@@ -618,7 +678,9 @@ def edge_frames(session, db=None, debug=False, **kwargs):
     # Generate output file name
     if pandas.isnull(db.loc[session, 'edge']):
         output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
-        db.loc[session, 'edge'] = output_file
+    else:
+        print "already edged, returning"
+        return
     
     # A better default for side
     if 'side' in kwargs:
@@ -639,17 +701,20 @@ def edge_frames(session, db=None, debug=False, **kwargs):
     # Depends on debug
     if debug:
         frames, edge_a = edge_frames_nodb(
-            row['vfile'], db.loc[session, 'edge'], side=side, debug=True,
+            row['vfile'], output_file, side=side, debug=True,
             **kwargs)
         
         return frames, edge_a
     else:
         edge_frames_nodb(
-            row['vfile'], db.loc[session, 'edge'], side=side, debug=False,
+            row['vfile'], output_file, side=side, debug=False,
             **kwargs)
+    
+    # Update the db
+    db = whiskvid.db.load_db()
+    db.loc[session, 'edge'] = output_file
+    whiskvid.db.save_db(db)      
 
-        # Save
-        whiskvid.db.save_db(db)  
 
 def edge_frames_nodb(video_file, edge_file, 
     lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
@@ -726,7 +791,10 @@ def purge_edge_frames(session, db=None):
     else:
         os.remove(edge_file)
     
-def edge_frames_debug_plot(session, frametimes, split_iters=7):
+def edge_frames_debug_plot(session, frametimes, split_iters=7,
+    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
+    roi_x=None, roi_y=None, lumthresh=None, side=None,
+    ):
     """This is a helper function for debugging edging.
     
     For some subset of frames, plot the raw frame, the detected edge,
@@ -734,6 +802,11 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
     
     Uses whiskvid.get_all_edges_from_video to get the intermediate results,
     and then plots them. Also returns all intermediate results.
+    
+    frametimes : which frames to analyze as a test
+    
+    roi_x, roi_y, lumthresh, side : can be provided, or else will be taken
+        from db
     """
     import my.plot 
     
@@ -744,20 +817,34 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
     db = whiskvid.db.load_db()
     v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
     video_file = db.loc[session, 'vfile']
-    side = db.loc[session, 'side']
-    roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
-    roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
+    
+    # Get params from db if necessary
+    if side is None:
+        side = db.loc[session, 'side']
+    if roi_x is None:
+        roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
+    if roi_y is None:
+        roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
+    if lumthresh is None:
+        lumthresh = db.loc[session, 'edge_lumthresh']
+    
+    # Gets the edges from subset of debug frames using provided parameters
     debug_res = whiskvid.get_all_edges_from_video(video_file, 
+        crop_x0=crop_x0, crop_x1=crop_x1, crop_y0=crop_y0, crop_y1=crop_y1,
         roi_x=roi_x, roi_y=roi_y, split_iters=split_iters, side=side,
+        lum_threshold=lumthresh,
         debug=True, debug_frametimes=frametimes)    
     
     # Plot them
-    f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True)
-    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True)
+    f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
+    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
     nax = 0
     for nax, ax in enumerate(axa.flatten()):
         # Get results for this frame
-        frame = debug_res['frames'][nax]
+        try:
+            frame = debug_res['frames'][nax]
+        except IndexError:
+            break
         binframe = debug_res['binframes'][nax]
         best_object = debug_res['best_objects'][nax]
         edge = debug_res['edges'][nax]
@@ -765,20 +852,25 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7):
         
         # Plot the frame
         im = my.plot.imshow(frame, ax=ax, axis_call='image', 
-            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
-        
+            cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
+        im.set_clim((0, 255))
+
         # Plot the edge
         if edge is not None:
-            ax.plot(edge[:, 1], edge[:, 0], 'g-')
+            ax.plot(edge[:, 1], edge[:, 0], 'g-', lw=5)
         
         # Plot the binframe
         ax2 = axa2.flatten()[nax]
         im2 = my.plot.imshow(binframe, ax=ax2, axis_call='image',
-            cmap=plt.cm.gray, extent=(0, v_width, v_height, 0))
+            cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
         
         # Plot the best object
         ax.set_title("t=%0.1f %s" % (
-            frametime, 'NO EDGE' if edge is None else ''))
+            frametime, 'NO EDGE' if edge is None else ''), size='small')
+    f.suptitle('Frames')
+    f2.suptitle('Binarized frames')
+    my.plot.rescue_tick(f=f)
+    my.plot.rescue_tick(f=f2)
     f.tight_layout()
     f2.tight_layout()
     plt.show()    
@@ -922,6 +1014,19 @@ def get_whisker_ends_hdf5(hdf5_file=None, side=None,
         new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
         new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
         summary = new_summary
+    elif side == 'right':
+        # Like left, but x is switched
+        
+        # Identify which are backwards
+        switch_mask = summary['tip_x'] > summary['fol_x']
+        
+        # Switch those rows
+        new_summary = summary.copy()
+        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
+        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
+        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
+        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
+        summary = new_summary        
     elif side == 'top':
         # Identify which are backwards (0 at the top (?))
         switch_mask = summary['tip_y'] < summary['fol_y']
@@ -1040,41 +1145,162 @@ def crop_session_nodb(input_file, output_file, crop_x0, crop_x1,
 ## end cropping
 
 ## tracing
-def trace_session(session, db=None, **kwargs):
-    """Crops the input file into the output file, and updates db"""
+def trace_session(session, db=None, create_monitor_video=False, 
+    chunk_size=200, stop_after_frame=None, n_trace_processes=8,
+    monitor_video_kwargs=None):
+    """Runs trace on session using WhiskiWrap.
+    
+    Currently this only works on modulated mat files.
+    It first writes them out as tiffs to trace
+        trace_write_chunked_tiffs_nodb
+        Optionally at this point a monitor video can also be created.
+    And then traces them
+        trace_session_nodb
+    If tiffs_to_trace directory already exists, the first step is skipped.
+    
+    session : name of session to trace
+    create_monitor_video : Whether to create a monitor video
+        This could be useful for subsequent analysis (eg, shapes)
+    monitor_video_kwargs : dict of kwargs for trace_write_chunked_tiffs_nodb
+        Default: {'vcodec': 'libx264', 'qp': 15}
+        For lossless, use {'vcodec': 'libx264', 'qp': 0}
+
+    chunk_size, stop_after_frame : passed to trace_write_chunked_tiffs_nodb
+    
+    """
     if db is None:
         db = whiskvid.db.load_db()
-    row = db.ix[session]
+
+    # Extract some info from the db
+    whisker_session_directory = db.loc[session, 'session_dir']
     
-    # Generate output file name
-    if pandas.isnull(db.loc[session, 'whiskers']):
-        output_file = whiskvid.db.Whiskers.generate_name(row['session_dir'])
-        db.loc[session, 'whiskers'] = output_file
+    # Error check that matfile_directory exists
+    # Later rewrite this to run on raw videos too
+    if pandas.isnull(db.loc[session, 'matfile_directory']):
+        raise ValueError("trace only supports matfile directory for now")
 
-    # Save right away, to avoid stale db
-    whiskvid.db.save_db(db)  
+    # Store the wseg_h5_fn in the db if necessary
+    if pandas.isnull(db.loc[session, 'wseg_h5']):
+        # Create a wseg h5 filename
+        db.loc[session, 'wseg_h5'] = whiskvid.db.WhiskersHDF5.generate_name(
+            whisker_session_directory)
+        
+        # Save right away, to avoid stale db
+        whiskvid.db.save_db(db)  
 
-    trace_session_nodb(row['vfile'], db.loc[session, 'whiskers'])
+    # Run the trace if the file doesn't exist
+    if not os.path.exists(db.loc[session, 'wseg_h5']):
+        # Where to put tiff stacks and timestamps and monitor video
+        tiffs_to_trace_directory = os.path.join(whisker_session_directory, 
+            'tiffs_to_trace')
+        timestamps_filename = os.path.join(whisker_session_directory, 
+            'tiff_timestamps.npy')
+        if create_monitor_video:
+            monitor_video = os.path.join(whisker_session_directory,
+                session + '.mkv')
+            if monitor_video_kwargs is None:
+                monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 21}
+        else:
+            monitor_video = None
+            monitor_video_kwargs = {}
+        
+        # Skip writing tiffs if the directory already exists
+        # This is a bit of a hack because tiffs_to_trace is not in the db
+        if not os.path.exists(tiffs_to_trace_directory):
+            # Create the directory and run trace_write_chunked_tiffs_nodb
+            os.mkdir(tiffs_to_trace_directory)
+            frame_width, frame_height = trace_write_chunked_tiffs_nodb(
+                matfile_directory=db.loc[session, 'matfile_directory'],
+                tiffs_to_trace_directory=tiffs_to_trace_directory,
+                timestamps_filename=timestamps_filename,
+                monitor_video=monitor_video, 
+                monitor_video_kwargs=monitor_video_kwargs,
+                chunk_size=chunk_size,
+                stop_after_frame=stop_after_frame,
+                )
+            
+            # Store the frame_width and frame_height
+            db = whiskvid.db.load_db()
+            if pandas.isnull(db.loc[session, 'v_width']):
+                db.loc[session, 'v_width'] = frame_width
+                db.loc[session, 'v_height'] = frame_height
+                whiskvid.db.save_db(db)
+        
+        # Tiffs have been written
+        # Now trace the session
+        trace_session_nodb(
+            h5_filename=db.loc[session, 'wseg_h5'],
+            tiffs_to_trace_directory=tiffs_to_trace_directory,
+            n_trace_processes=n_trace_processes,
+            )
+
+def trace_write_chunked_tiffs_nodb(matfile_directory, tiffs_to_trace_directory,
+    timestamps_filename=None, monitor_video=None, monitor_video_kwargs=None,
+    chunk_size=None, stop_after_frame=None):
+    """Generate a PF reader and call WhiskiWrap.write_video_as_chunked_tiffs
     
+    Returns: frame_width, frame_height
+    """
+    # Generate a PF reader
+    pfr = WhiskiWrap.PFReader(matfile_directory)
 
-def trace_session_nodb(input_file, output_file, verbose=False):
+    # Write the video
+    ctw = WhiskiWrap.write_video_as_chunked_tiffs(pfr, tiffs_to_trace_directory,
+        chunk_size=chunk_size,
+        stop_after_frame=stop_after_frame, 
+        monitor_video=monitor_video,
+        timestamps_filename=timestamps_filename,
+        monitor_video_kwargs=monitor_video_kwargs)    
+    
+    return pfr.frame_width, pfr.frame_height
+
+def trace_session_nodb(h5_filename, tiffs_to_trace_directory,
+    n_trace_processes=8):
     """Trace whiskers from input to output"""
-    cmd = 'trace %s %s' % (input_file, output_file)
-    run_dir = os.path.split(input_file)[0]
-    run_dir2 = os.path.split(output_file)[0]
-    if run_dir != run_dir2:
-        raise ValueError("warning: trace I/O needs same dir")
-    if verbose:
-        print cmd
+    WhiskiWrap.trace_chunked_tiffs(
+        h5_filename=h5_filename,
+        input_tiff_directory=tiffs_to_trace_directory,
+        n_trace_processes=n_trace_processes,
+        )
+
+## Syncing
+def sync_with_behavior(session, light_delta=30, diffsize=2, refrac=50, 
+    **kwargs):
+    """Sync video with behavioral file and store in db
     
-    orig_dir = os.getcwd()
-    os.chdir(run_dir)
-    try:        
-        os.system(cmd)
-    except:
-        raise
-    finally:
-        os.chdir(orig_dir)
+    Uses decrements in luminance and the backlight signal to do the sync.
+    Assumes the backlight decrement is at the time of entry to state 1.
+    Assumes video frame rates is 30fps, regardless of actual frame rate.
+    And fits the behavior to the video based on that.
+    """
+    db = whiskvid.db.load_db()
+    video_file = db.loc[session, 'vfile']
+    bfile = db.loc[session, 'bfile']
+
+    b2v_fit = sync_with_behavior_nodb(
+        video_file=video_file,
+        bfile=bfile,
+        light_delta=light_delta,
+        diffsize=diffsize,
+        refrac=refrac,
+        **kwargs)
+
+    # Save the sync
+    db = whiskvid.db.load_db()
+    db.loc[session, ['fit_b2v0', 'fit_b2v1']] = b2v_fit
+    db.loc[session, ['fit_v2b0', 'fit_v2b1']] = my.misc.invert_linear_poly(
+        b2v_fit)
+    whiskvid.db.save_db(db)    
+
+def sync_with_behavior_nodb(video_file, bfile, light_delta, diffsize, refrac):
+    """Sync video with behavioral file
+    
+    This got moved to BeWatch.syncing
+    """    
+    return BeWatch.syncing.sync_video_with_behavior(bfile=bfile,
+        lums=None, video_file=video_file, light_delta=light_delta,
+        diffsize=diffsize, refrac=refrac, assumed_fps=30.,
+        error_if_no_fit=True)
 
 ## Calculating contacts
 def calculate_contacts_manual_params_db(session, **kwargs):
@@ -1084,6 +1310,8 @@ def calculate_contacts_manual_params_db(session, **kwargs):
     row = db.ix[session]
     
     # Get manual params
+    if pandas.isnull(row['vfile']):
+        raise ValueError("vfile is null for session %s" % session)
     params = calculate_contacts_manual_params(row['vfile'], interactive=True, 
         **kwargs)
     for key, value in params.items():
@@ -1094,6 +1322,8 @@ def calculate_contacts_manual_params_db(session, **kwargs):
 
 def calculate_contacts_manual_params(vfile, n_frames=4, interactive=False):
     """Display a subset of video frames to set fol_x and fol_y"""
+    if pandas.isnull(vfile):
+        raise ValueError("vfile is null")
     res = my.video.choose_rectangular_ROI(vfile, n_frames=n_frames, 
         interactive=interactive)
     
@@ -1115,13 +1345,13 @@ def calculate_contacts_session(session, db=None, **kwargs):
     if pandas.isnull(row['tac']):
         db.loc[session, 'tac'] = whiskvid.db.Contacts.generate_name(
             row['session_dir'])
+        whiskvid.db.save_db(db)
+    
     tac = calculate_contacts(row['wseg_h5'], row['edge'], row['side'], 
         tac_filename=db.loc[session, 'tac'], 
         fol_range_x=(db.loc[session, 'fol_x0'], db.loc[session, 'fol_x1']),
         fol_range_y=(db.loc[session, 'fol_y0'], db.loc[session, 'fol_y1']),
         **kwargs)
-    
-    whiskvid.db.save_db(db)
 
 def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     length_thresh=75, contact_dist_thresh=10,
@@ -1180,6 +1410,32 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
+
+
+def get_masked_whisker_ends(h5_filename, side, 
+    fol_range_x, fol_range_y, length_thresh=75, 
+    verbose=True):
+    """Return a table of whiskers that has been masked by follicle and length
+    
+    """
+    # Get the ends
+    resdf = get_whisker_ends_hdf5(h5_filename, side=side)
+    if verbose:
+        print "whisker rows: %d" % len(resdf)
+
+    # Drop everything < thresh
+    resdf = resdf[resdf['length'] >= length_thresh]
+    if verbose:
+        print "whisker rows after length: %d" % len(resdf)
+
+    # Follicle mask
+    resdf = resdf[
+        (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
+        (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
+    if verbose:
+        print "whisker rows after follicle mask: %d" % len(resdf)    
+    
+    return resdf
 
 def purge_tac(session, db=None):
     """Delete the tac"""
@@ -1313,68 +1569,91 @@ def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
 ## End edge summary dumping
 
 ## Frame dumping
-def dump_frames(session, db=None):
-    """Calls `dump_frames_nodb` on `session`"""
-    if db is None:
-        db = whiskvid.db.load_db()    
-
-    # Get behavior df
-    bfilename = db.loc[session, 'bfile']
-    b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
-    video_file = db.loc[session, 'vfile']
+#~ def dump_frames(session, db=None):
+    #~ """Calls `dump_frames_nodb` on `session`
     
-    # Set up filename
-    db_changed = False
-    if pandas.isnull(db.loc[session, 'frames']):
-        db.loc[session, 'frames'] = whiskvid.db.TrialFramesDir.generate_name(
-            db.loc[session, 'session_dir'])
-        db_changed = True
-    frame_dir = db.loc[session, 'frames']
-    
-    # Dump frames   
-    dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir)
+    #~ This has all been moved into 
+        #~ make_overlay_image_nodb
+    #~ to use newer frame extraction methods. Could be broken out again,
+    #~ probably.
+    #~ """
+    #~ if db is None:
+        #~ db = whiskvid.db.load_db()    
 
-    if db_changed:
-        whiskvid.db.save_db(db)
-
-def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
-    """Dump frames at servo retraction time
+    #~ # Get behavior df
+    #~ bfilename = db.loc[session, 'bfile']
+    #~ b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
+    #~ video_file = db.loc[session, 'vfile']
     
-    Wrapper around BeWatch.overlays.dump_frames_at_retraction_time
-    """
-    # overlays
-    duration = my.video.get_video_duration(video_file)
-    metadata = {'filename': bfilename, 'fit0': b2v_fit[0], 'fit1': b2v_fit[1],
-        'guess_vvsb_start': 0, 'filename_video': video_file, 
-        'duration_video': duration * np.timedelta64(1, 's')}
-    if not os.path.exists(frame_dir):
-        os.mkdir(frame_dir)
-        BeWatch.overlays.dump_frames_at_retraction_time(metadata, frame_dir)
-    else:
-        print "not dumping frames, %s already exists" % frame_dir
+    #~ # Set up filename
+    #~ db_changed = False
+    #~ if pandas.isnull(db.loc[session, 'frames']):
+        #~ db.loc[session, 'frames'] = whiskvid.db.TrialFramesDir.generate_name(
+            #~ db.loc[session, 'session_dir'])
+        #~ db_changed = True
+    #~ frame_dir = db.loc[session, 'frames']
+    
+    #~ # Dump frames   
+    #~ dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir)
+
+    #~ if db_changed:
+        #~ whiskvid.db.save_db(db)
+
+#~ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
+    #~ """Dump frames at servo retraction time
+    
+    #~ This has all been moved into 
+        #~ make_overlay_image_nodb
+    #~ to use newer frame extraction methods. Could be broken out again,
+    #~ probably.    
+    
+    #~ Wrapper around BeWatch.overlays.dump_frames_at_retraction_time
+    #~ """
+    #~ # overlays
+    #~ duration = my.video.get_video_duration(video_file)
+    #~ metadata = {'filename': bfilename, 'fit0': b2v_fit[0], 'fit1': b2v_fit[1],
+        #~ 'guess_vvsb_start': 0, 'filename_video': video_file, 
+        #~ 'duration_video': duration * np.timedelta64(1, 's')}
+    #~ if not os.path.exists(frame_dir):
+        #~ os.mkdir(frame_dir)
+        #~ BeWatch.overlays.dump_frames_at_retraction_time(metadata, frame_dir)
+    #~ else:
+        #~ print "not dumping frames, %s already exists" % frame_dir
 ## End frame dumping
 
 ## Overlays
-def make_overlay_image(session, db=None, ax=None):
+def make_overlay_image(session, db=None, verbose=True, ax=None):
     """Generates trial_frames_by_type and trial_frames_all_types for session
     
     This is a wrapper around make_overlay_image_nodb that extracts metadata
     and works with the db.
+
+    Calculates, saves, and returns the following:
     
-    Returns: trial_frames_by_type, trial_frames_all_types
+    sess_meaned_frames : pandas dataframe
+        containing the meaned image over all trials of each type
+        AKA TrialFramesByType
+    
+    overlay_image_name : 3d color array of the overlays
+        This is the sum of all the types in trial_frames_by_type, colorized
+        by rewarded side.
+        AKA TrialFramesAllTypes
+    
+    trialnum2frame : dict of trial number to frame
+
+    
+    Returns: trialnum2frame, sess_meaned_frames, C
     """
     if db is None:
         db = whiskvid.db.load_db()    
 
     # Get behavior df
-    bfile_name = db.loc[session, 'bfile']
-    trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
-    frame_dir = db.loc[session, 'frames']
-
-    # Error check
-    # Should this be a cascading call to dump_frames?
-    if pandas.isnull(frame_dir) or not os.path.exists(frame_dir):
-        raise ValueError("frames must be dumped before making overlays")
+    behavior_filename = db.loc[session, 'bfile']
+    lines = ArduFSM.TrialSpeak.read_lines_from_file(db.loc[session, 'bfile'])
+    trial_matrix = ArduFSM.TrialSpeak.make_trials_matrix_from_logfile_lines2(lines)
+    trial_matrix = ArduFSM.TrialSpeak.translate_trial_matrix(trial_matrix)
+    video_filename = db.loc[session, 'vfile']
+    b2v_fit = [db.loc[session, 'fit_b2v0'], db.loc[session, 'fit_b2v1']]
 
     def get_or_generate_filename(file_class):
         db_changed = False
@@ -1391,69 +1670,78 @@ def make_overlay_image(session, db=None, ax=None):
         whiskvid.db.TrialFramesAllTypes)
     trial_frames_by_type_filename, db_changed2 = get_or_generate_filename(
         whiskvid.db.TrialFramesByType)
+    trialnum2frame_filename = os.path.join(db.loc[session, 'session_dir'],
+        'trialnum2frame.pickle')
+
+    # Load from cache if possible
+    if os.path.exists(trialnum2frame_filename):
+        if verbose:
+            print "loading cached trialnum2frame"
+        trialnum2frame = my.misc.pickle_load(trialnum2frame_filename)
+    else:
+        trialnum2frame = None
 
     # Call make_overlay_image_nodb
-    trial_frames_by_type, trial_frames_all_types = \
-        make_overlay_image_nodb(trial_frames_by_type_filename,
-        overlay_image_name, frame_dir, trial_matrix, ax=ax)
+    trialnum2frame, sess_meaned_frames, C = make_overlay_image_nodb(
+        trialnum2frame,
+        behavior_filename, video_filename, 
+        b2v_fit, trial_matrix, verbose=verbose, ax=ax)
     
-    # Save db
-    if db_changed1 or db_changed2:
-        whiskvid.db.save_db(db)     
-    else:
-        print "no changes made to overlay filenames in db for", session    
+    # Save
+    my.misc.pickle_dump(trialnum2frame, trialnum2frame_filename)
+    whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename,
+        sess_meaned_frames)
+    whiskvid.db.TrialFramesAllTypes.save(overlay_image_name,
+        C)
     
-    return trial_frames_by_type, trial_frames_all_types
+    # Update db
+    db = whiskvid.db.load_db()    
+    db.loc[session, 'overlays'] = trial_frames_by_type_filename
+    db.loc[session, 'frames'] = trialnum2frame_filename
+    db.loc[session, 'overlay_image'] = overlay_image_name
+    whiskvid.db.save_db(db)     
     
-def make_overlay_image_nodb(trial_frames_by_type_filename,
-    overlay_image_name, frame_dir, trial_matrix, ax=None):
+    return trialnum2frame, sess_meaned_frames, C
+    
+def make_overlay_image_nodb(trialnum2frame=None,
+    behavior_filename=None, video_filename=None, 
+    b2v_fit=None, trial_matrix=None, verbose=True, ax=None):
     """Make overlays of shapes to show positioning.
     
     Wrapper over the methods in BeWatch.overlays
-    
-    trial_frames_by_type_filename : where to save the pandas dataframe
-        containing the meaned image over all trials of each type
-    overlay_image_name : where to save the 3d color array of the overlays
-        This is the sum of all the types in trial_frames_by_type, colorized
-        by rewarded side.
-    frame_dir : where the frames are
-    trial_matrix : the trial matrix
-    
-    In addition to saving them to disk, this also returns:
-        trial_frames_by_type (DataFrame), trial_frames_all_types (array)
-    
+
+    trialnum2frame : if known
+        Otherwise, provide behavior_filename, video_filename, and b2v_fit
+
+    Returns:
+        trialnum2frame, sess_meaned_frames (DataFrame), C (array)
     """
-    # Make the various overlays
-    # Reload
-    trialnum2frame = BeWatch.overlays.load_frames_by_trial(
-        frame_dir, trial_matrix)
+    # Get trialnum2frame
+    if trialnum2frame is None:
+        if verbose:
+            print "calculating trialnum2frame"
+        trialnum2frame = BeWatch.overlays.extract_frames_at_retraction_times(
+            behavior_filename=behavior_filename, 
+            video_filename=video_filename, 
+            b2v_fit=b2v_fit, 
+            verbose=verbose)
 
-    # Keep only those trials that we found images for
-    trial_matrix = trial_matrix.ix[sorted(trialnum2frame.keys())]
+    # Calculate sess_meaned_frames
+    sess_meaned_frames = BeWatch.overlays.calculate_sess_meaned_frames(
+        trialnum2frame, trial_matrix)
 
-    # Generate the trial_frames_by_type data frame
-    # Split on side, servo_pos, stim_number
-    res = []
-    gobj = trial_matrix.groupby(['rewside', 'servo_pos', 'stepper_pos'])
-    for (rewside, servo_pos, stim_number), subti in gobj:
-        meaned = np.mean([trialnum2frame[trialnum] for trialnum in subti.index],
-            axis=0)
-        res.append({'rewside': rewside, 'servo_pos': servo_pos, 
-            'stim_number': stim_number, 'meaned': meaned})
-    resdf = pandas.DataFrame.from_records(res)
-
-    # Save trial_frames_by_type
-    whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename, resdf)
+    #~ # Save trial_frames_by_type
+    #~ whiskvid.db.TrialFramesByType.save(trial_frames_by_type_filename, resdf)
 
     # Make figure window
     if ax is None:
         f, ax = plt.subplots(figsize=(6.4, 6.2))
 
     # Make the trial_frames_all_types and save it
-    C = BeWatch.overlays.make_overlay(resdf, ax, meth='all')
-    whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
+    C = BeWatch.overlays.make_overlay(sess_meaned_frames, ax, meth='all')
+    #~ whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
     
-    return resdf, C
+    return trialnum2frame, sess_meaned_frames, C
 ## End overlays
 
 
@@ -1533,7 +1821,6 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         my.plot.rescue_tick(ax=ax, x=4, y=4)
     else:
         raise ValueError("bad versus: %s" % versus)
-
     plt.show()
     
     return ax
@@ -1556,8 +1843,6 @@ def plot_edge_summary(session, ax=None, **kwargs):
     trial_matrix = everything['trial_matrix']
     trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
         db.loc[session, 'bfile'])
-    choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
-    trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)
 
     # Get hists
     typical_edges_hist2d = np.sum(everything['edge_summary']['H_l'], axis=0)
@@ -1609,6 +1894,10 @@ def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     
     db.loc[session, 'contact_video'] = output_filename
     whiskvid.db.save_db(db)
+
+def write_video_with_overlays(session):
+    """Wrapper around output_video.write_video_with_overlays"""
+    pass
 
 ## end edge_summary + tac
 
