@@ -16,7 +16,10 @@
         Same as above but save to db
 * Plotting stuff, basically part of the pipeline
 """
-import traj, trace
+try:
+    import traj, trace
+except ImportError:
+    pass
 import numpy as np, pandas
 import os
 import scipy.ndimage
