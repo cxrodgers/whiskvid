@@ -29,6 +29,8 @@ import BeWatch
 import whiskvid
 import WhiskiWrap
 import matplotlib.pyplot as plt
+import pandas
+
 try:
     import tables
 except ImportError:
@@ -2036,5 +2038,63 @@ def logreg_perf_vs_contacts(session):
         ax.errorbar(x=bins, y=bin_mean_l, yerr=bin_err_l)
     f.suptitle(session)
     plt.show()    
+
+##
+
+
+## for classifying whiskers
+def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
+    fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150):
+    """Classify the whiskers by their position on the face
+    
+    First we apply two length thresholds (one for posterior and one
+    for anterior). Then we rank the remaining whisker objects in each
+    frame from back to front. 
+    
+    mwe is returned with a new column 'color_group' with these ranks.
+    0 means that the whisker is not in a group.
+    1 is the one with minimal y-coordinate.
+    Ranks greater than max_whiskers are set to 0.
+    
+    Debug plots:
+    bins = np.arange(orig_mwe.fol_y.min(), orig_mwe.fol_y.max(), 1)
+    f, ax = plt.subplots()
+    for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+        ax.hist(submwe.fol_y.values, bins=bins, histtype='step')
+
+    bins = np.arange(orig_mwe.pixlen.min(), orig_mwe.pixlen.max(), 1)
+    f, ax = plt.subplots()
+    for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+        ax.hist(submwe.pixlen.values, bins=bins, histtype='step')
+    
+    f, ax = plt.subplots()
+    for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+        ax.plot(submwe.angle.values, submwe.fol_y.values, ',')    
+    """
+    orig_mwe = mwe.copy()
+
+    # Apply various thresholds
+    mwe = mwe[
+        ((mwe.pixlen >= long_pixlen_thresh) & (mwe.fol_y < fol_y_cutoff)) | 
+        ((mwe.pixlen >= short_pixlen_thresh) & (mwe.fol_y >= fol_y_cutoff))
+    ]
+
+    # Subsample to save time
+    mwe = mwe[mwe.frame.mod(subsample_frame) == 0]
+
+    # Argsort each frame
+    print "sorting whiskers in order"
+    
+    # No need to add 1 because rank starts with 1
+    mwe['ordinal'] = mwe.groupby('frame')['fol_y'].apply(
+        lambda ser: ser.rank(method='first'))
+
+    # Anything beyond C4 is not real
+    mwe.loc[mwe['ordinal'] > max_whiskers, 'ordinal'] = 0
+
+    orig_mwe['color_group'] = 0
+    orig_mwe.loc[mwe.index, 'color_group'] = mwe['ordinal'].astype(np.int)
+    
+    return orig_mwe
 
 ##
