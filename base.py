@@ -1413,6 +1413,43 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
 
+def get_masked_whisker_ends_db(session, add_angle=True,
+    add_sync=True, **kwargs):
+    """Wrapper around get_masked_whisker_ends that uses info from db
+    
+    kwargs are passed to get_masked_whisker_ends
+    
+    add_angle: uses the arctan2 method to add an angle column
+    add_sync: uses db sync to add vtime and btime columns
+    
+    Finally, an "angle" and 
+    """
+    db = whiskvid.db.load_db()
+    
+    mwe = whiskvid.get_masked_whisker_ends(
+        h5_filename=db.loc[session, 'h5_filename'],
+        side=db.loc[session, 'side'],
+        fol_range_x=db.loc[session, ['fol_x0', 'fol_x1']].values, 
+        fol_range_y=db.loc[session, ['fol_y0', 'fol_y1']].values, 
+        **kwargs)
+
+    if add_angle:
+        # Get angle on each whisker
+        mwe['angle'] = np.arctan2(
+            -(mwe['fol_y'].values - mwe['tip_y'].values),
+            mwe['fol_x'].values - mwe['tip_x'].values) * 180 / np.pi
+
+    if add_sync:
+        # Get fit from video to behavior
+        if pandas.isnull(db.loc[session, 'fit_v2b0']):
+            print "warning: no sync information available"
+        else:
+            v2b_fit = db.loc[session,
+                ['fit_v2b0', 'fit_v2b1']].values.astype(np.float)
+            mwe['vtime'] = mwe['frame'] / 30.
+            mwe['btime'] = np.polyval(v2b_fit, mwe.vtime.values)    
+    
+    return mwe
 
 def get_masked_whisker_ends(h5_filename, side, 
     fol_range_x, fol_range_y, length_thresh=75, 
