@@ -16,7 +16,8 @@ class OutOfFrames(BaseException):
 def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
     im2, edge_a_obj, contact_positions_l,
-    d_spatial, d_temporal, contact_colors):
+    d_spatial, d_temporal, contact_colors,
+    truncate_edge_y=100):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -26,6 +27,10 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     frame : the image data
     whisker_handles : handles to whiskers lines that will be deleted
     contacts_table : contacts to plot
+    
+    truncate_edge_y : if Not None, drops everything with y < this value
+        in the edge. This is useful for when the shape edge connects
+        to the top of th frame
     
     Returns: whisker_handles
         These are returned so that they can be deleted next time
@@ -46,8 +51,12 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     if edge_a is not None:
         edge_a_frame = edge_a[nframe]
         if edge_a_frame is not None:
-            edge_a_obj.set_xdata(edge_a_frame[:, 1])
-            edge_a_obj.set_ydata(edge_a_frame[:, 0])
+            if truncate_edge_y is not None:
+                edge_a_obj.set_data(edge_a_frame[
+                    edge_a_frame[:, 0] >= truncate_edge_y].T[::-1])
+            else:
+                edge_a_obj.set_xdata(edge_a_frame[:, 1])
+                edge_a_obj.set_ydata(edge_a_frame[:, 0])
         else:
             edge_a_obj.set_xdata([np.nan])
             edge_a_obj.set_ydata([np.nan])
