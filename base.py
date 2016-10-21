@@ -1427,7 +1427,7 @@ def get_masked_whisker_ends_db(session, add_angle=True,
     db = whiskvid.db.load_db()
     
     mwe = whiskvid.get_masked_whisker_ends(
-        h5_filename=db.loc[session, 'h5_filename'],
+        h5_filename=db.loc[session, 'wseg_h5'],
         side=db.loc[session, 'side'],
         fol_range_x=db.loc[session, ['fol_x0', 'fol_x1']].values, 
         fol_range_y=db.loc[session, ['fol_y0', 'fol_y1']].values, 
@@ -2135,3 +2135,67 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     return orig_mwe
 
 ##
+
+def get_triggered_whisker_angle(vsession, bsession, **kwargs):
+    """Load the whisker angle from mwe and trigger on trial times
+    
+    This is a wrapper around get_triggered_whisker_angle_nodb
+    """
+    mwe = whiskvid.get_masked_whisker_ends_db(vsession)
+    v2b_fit = db.loc[vsession,
+        ['fit_v2b0', 'fit_v2b1']].values.astype(np.float)
+    tm = BeWatch.db.get_trial_matrix(bsession, True)
+    
+    twa = get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, **kwargs)
+    
+    return twa
+
+def get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, relative_time_bins=None):
+    """Load the whisker angle from mwe and trigger on trial times
+    
+    The angle is meaned over whiskers by frame.
+    
+    relative_time_bins: timepoints at which to infer whisker angle
+    """
+    if relative_time_bins is None:
+        relative_time_bins = np.arange(-3.5, 5, .05)
+    
+    ## mean angle over whiskers by frame
+    angle_by_frame = mwe.groupby('frame')['angle'].mean()
+    angle_vtime = angle_by_frame.index.values / 30.
+    angle_btime = np.polyval(v2b_fit, angle_vtime)
+
+    ## Now extract mean angle for each RWIN open time
+    # convert rwin_open_time to seconds
+    rwin_open_times_by_trial = tm['rwin_time']
+
+    # Index the angle based on the btime
+    angle_by_btime = pandas.Series(index=angle_btime, 
+        data=angle_by_frame.values)
+    angle_by_btime.index.name = 'btime'
+
+    # Iterate over trigger times
+    triggered_whisker_angle_l = []
+    for trial, trigger_time in rwin_open_times_by_trial.dropna().iteritems():
+        # Get time bins relative to trigger
+        absolute_time_bins = relative_time_bins + trigger_time
+        
+        # Reindex the data to these time bins
+        resampled = angle_by_btime.reindex(
+            angle_by_btime.index | 
+            pandas.Index(absolute_time_bins)).interpolate(
+            'index').ix[absolute_time_bins]
+        
+        # Store
+        triggered_whisker_angle_l.append(resampled)
+
+    # DataFrame the result keyed by trial
+    twa = pandas.DataFrame(
+        index=relative_time_bins,
+        columns=rwin_open_times_by_trial.dropna().index,
+        data=np.transpose(triggered_whisker_angle_l))
+
+    # Drop trials with missing data at the beginning and end of the video
+    twa = twa.dropna(1)
+    
+    return twa
