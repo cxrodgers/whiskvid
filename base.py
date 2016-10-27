@@ -2141,6 +2141,8 @@ def get_triggered_whisker_angle(vsession, bsession, **kwargs):
     
     This is a wrapper around get_triggered_whisker_angle_nodb
     """
+    db = whiskvid.db.load_db()
+    
     mwe = whiskvid.get_masked_whisker_ends_db(vsession)
     v2b_fit = db.loc[vsession,
         ['fit_v2b0', 'fit_v2b1']].values.astype(np.float)
