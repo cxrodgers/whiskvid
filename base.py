@@ -2081,7 +2081,8 @@ def logreg_perf_vs_contacts(session):
 
 ## for classifying whiskers
 def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
-    fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150):
+    fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150,
+    subsample_frame=1):
     """Classify the whiskers by their position on the face
     
     First we apply two length thresholds (one for posterior and one
@@ -2356,3 +2357,22 @@ def summarize_contacts_nodb(tac_clustered):
     
     return contacts_summary
 
+def normalize_edge_summary(edge_summary):
+    """Normalize each trial type in edge_summary and mean.
+    
+    Also dumps edges with y < 100 because those usually are all the way
+    at the top of the frame
+    """
+    # Sum over each type of trial
+    # Normalize each trial type to its max, and then mean
+    normalized_es_l = []
+    for es in edge_summary['H_l']:
+        # Drop everything for which y < 100 (which is the top of the frame)
+        es = es.copy()
+        es[edge_summary['row_edges'][:-1] < 100] = 0
+        
+        # Normalize to max
+        normalized_es_l.append(es / es.max())
+    edge_hist2d = np.mean(normalized_es_l, axis=0)
+    
+    return edge_hist2d
