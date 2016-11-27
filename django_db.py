@@ -243,6 +243,16 @@ class VideoSession(object):
         # DataLoader (uses self.get_path)
         self.load_data = DataLoader(self)
 
+    @classmethod
+    def from_name(self, name):
+        """Query database for session name and initialize VideoSession"""
+        # Load django object
+        django_vsession = whisk_video.models.VideoSession.objects.filter(
+            name=name).first()
+        
+        # Initialize object from that
+        return VideoSession(django_vsession)
+        
     @property
     def fit_b2v(self):
         return np.array([
