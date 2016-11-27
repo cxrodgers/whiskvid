@@ -19,6 +19,110 @@ neural_root_directory_search_list = [
     os.path.expanduser('~/mnt/nas2_home/neural'),
 ]
 
+
+class CalculationHandler(object):
+    """Generic object for handling results of a calculation
+    
+    Derived objects must set these attributes:
+        _name
+        _db_field_path
+        _default_filename
+    """
+    def __init__(self, video_session):
+        """Initalize a new handler for this video session"""
+        self.video_session = video_session
+        
+    @property
+    def get_path(self):
+        """Full path to file using session directory and database field
+        
+        Raises ValueError if the field is not set
+        Raises IOError if the field is set but the file does not exist
+        
+        Returns: full path to file
+        """
+        # Refresh db
+        # This may not really be necessary if it causes slow downs
+        self.video_session._django_object.refresh_from_db()
+        
+        # Get the filename from the db
+        short_filename = getattr(self.video_session._django_object,
+            self._db_field_path)
+        
+        # Test if null
+        if short_filename is None or short_filename == '':
+            raise ValueError("%s is not set in db for %s" % (
+                self._db_field_path, str(self.video_session)))
+            return None
+        
+        # Raise exception if file doesn't exist?
+        full_filename = os.path.join(
+            self.video_session.get_path.session,
+            short_filename,
+        )
+        if not os.path.exists(full_filename):
+            raise IOError("file does not exist: %s" % full_filename)
+        
+        # Return
+        return full_filename
+    
+    @property
+    def new_path(self):
+        """Generate a new filename
+        
+        This will not be a full path, but a short filename, suitable
+        for setting the database with.
+        """
+        return self._default_filename
+
+    def set_path(self, new_path=None):
+        """Set file in database
+        
+        By default it is set to the default value given by self.new_path
+        If another path is desired, specify `new_path`. It should be a
+        short filename, not a full path.
+        
+        Triggers a database save.
+        
+        Returns: new_path
+        """
+        if new_path is None:
+            new_path = self.new_path
+        
+        setattr(self.video_session._django_object, self._db_field_path, 
+            new_path)
+        self.video_session._django_object.save()
+        
+        return new_path
+
+    def load_data(self):
+        """Read data or raise IOError"""
+        filename = self.get_path
+        try:
+            data = pandas.read_pickle(filename)
+        except IOError:
+            raise IOError("cannot read pickle at %s" % filename)
+        return data        
+
+    def calculate(self, **kwargs):
+        pass
+    
+    def set_manual_params_if_needed(self, **kwargs):
+        pass
+
+class Tac(CalculationHandler):
+    _db_field_path = 'tac_filename'
+    _name = 'tac'
+    _default_filename = 'tac'
+    
+    def calculate(self, **kwargs):
+        pass
+    
+    def set_manual_params_if_needed(self, **kwargs):
+        pass
+    
+    
+
 class NeuralPathJoiner(object):
     def __init__(self, neural_session, root_directory=None):
         # Figure out which root directory we're using
@@ -76,7 +180,7 @@ class PathJoiner(object):
             for try_root_dir in root_directory_search_list:
                 self._root_directory = try_root_dir
                 self._session_directory = os.path.join(self._root_directory,
-                    video_session._field_name)
+                    video_session.name)
                 
                 if os.path.exists(self._session_directory):
                     break
@@ -84,7 +188,7 @@ class PathJoiner(object):
             # Use the requested root directory
             self._root_directory = try_root_dir
             self._session_directory = os.path.join(self._root_directory,
-                video_session._field_name)            
+                video_session.name)            
         
         # Ensure we found the session
         if not os.path.exists(self._session_directory):
@@ -215,20 +319,8 @@ class VideoSession(object):
             Will raise IOError if fails to load
     """
     def __init__(self, django_object):
-        # Copy values
-        for field in django_object._meta.fields:
-            setattr(self, '_field_' + field.name, 
-                getattr(django_object, field.name))
-        
-        # Unhide simple properties
-        simple_properties_l = ['frame_height', 'frame_width', 'name',
-            'frame_rate']
-        for simple_property in simple_properties_l:
-            try:
-                value = getattr(self, '_field_' + simple_property)
-            except AttributeError:
-                continue
-            setattr(self, simple_property, value)
+        # Store a reference to the django_object
+        self._django_object = django_object
 
         # _field_bsession is a django object, for now
         # at least extract the name
@@ -242,7 +334,13 @@ class VideoSession(object):
         
         # DataLoader (uses self.get_path)
         self.load_data = DataLoader(self)
+        
+        # Install the handlers
+        self.tac = Tac(self)
+        # self.get_path.tac = self.tac.get_path
+        # self.data_load.tac = self.tac.data_load
 
+    ## Initializing shortcut
     @classmethod
     def from_name(self, name):
         """Query database for session name and initialize VideoSession"""
@@ -252,6 +350,25 @@ class VideoSession(object):
         
         # Initialize object from that
         return VideoSession(django_vsession)
+    
+    ## Shortcut accessor methods to commonly used fields in django object
+    # Other properties may be accessed like
+    # vs._django_object.field_name
+    @property
+    def frame_height(self):
+        return self._django_object.frame_height
+    
+    @property
+    def frame_width(self):
+        return self._django_object.frame_width
+
+    @property
+    def name(self):
+        return self._django_object.name
+    
+    @property
+    def frame_rate(self):
+        return self._django_object.frame_rate
         
     @property
     def fit_b2v(self):
