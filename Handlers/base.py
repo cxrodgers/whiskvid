@@ -7,11 +7,31 @@ class CalculationHandler(object):
     Derived objects must set these attributes:
         _name
         _db_field_path
+    
+    _db_field_path must be a CharField
     """
     def __init__(self, video_session):
         """Initalize a new handler for this video session"""
         self.video_session = video_session
+    
+    def _get_field(self):
+        """Return the value stored at _db_field_path"""
+        # Refresh db
+        # This may not really be necessary if it causes slow downs
+        self.video_session._django_object.refresh_from_db()
         
+        # Get the filename from the db
+        short_filename = getattr(self.video_session._django_object,
+            self._db_field_path)
+        
+        return short_filename
+    
+    @property
+    def field_is_null(self):
+        """Returns True if the value stored at _db_field_path is None or ''"""
+        value = self._get_field()
+        return value is None or value == ''
+    
     @property
     def get_path(self):
         """Full path to file using session directory and database field
@@ -21,19 +41,13 @@ class CalculationHandler(object):
         
         Returns: full path to file
         """
-        # Refresh db
-        # This may not really be necessary if it causes slow downs
-        self.video_session._django_object.refresh_from_db()
-        
         # Get the filename from the db
-        short_filename = getattr(self.video_session._django_object,
-            self._db_field_path)
+        short_filename = self._get_field()
         
         # Test if null
         if short_filename is None or short_filename == '':
             raise ValueError("%s is not set in db for %s" % (
                 self._db_field_path, str(self.video_session)))
-            return None
         
         # Raise exception if file doesn't exist?
         full_filename = os.path.join(
@@ -74,6 +88,25 @@ class CalculationHandler(object):
         self.video_session._django_object.save()
         
         return new_path
+
+    def set_path_if_exists(self):
+        """If the field is null and new_path exists, set_path
+        
+        If the field is already set, nothing happens. Otherwise,
+        we call new_path to find out what the path would be. Then we
+        check if it exists on disk. If it does, then we set_path.
+        """
+        if self.field_is_null:
+            # Generate the full new path
+            new_path = os.path.join(self.video_session.session_path, 
+                self.new_path)
+
+            # If that file exists, then set it
+            if os.path.exists(new_path):
+                self.set_path()
+            
+                # This should now work
+                return self.get_path
 
     def load_data(self):
         """Read data or raise IOError"""

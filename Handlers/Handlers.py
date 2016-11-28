@@ -46,6 +46,22 @@ class MonitorVideoHandler(CalculationHandler):
     def new_path(self):
         return self.video_session.name + '.mkv'
 
+class ClusteredTacHandler(CalculationHandler):
+    """Tac after clustering"""
+    _db_field_path = 'clustered_tac_filename'
+    _name = 'clustered_tac'
+
+class ColorizedWhiskerEndsHandler(CalculationHandler):
+    """Whisker ends after colorizing"""
+    _db_field_path = 'colorized_whisker_ends_filename'
+    _name = 'colorized_whisker_ends'
+    
+class ContactsSummaryHandler(CalculationHandler):
+    """Contacts summmary"""
+    _db_field_path = 'contacts_summary_filename'
+    _name = 'contacts_summary'
+
+
 ## Handlers for data that haven't been incorporated into the database yet
 # Need to do this, so that we can easily check which have been generated
 # For now we hard-code the path
@@ -77,18 +93,6 @@ class MaskedWhiskerEndsHandler(CalculationHandlerWithoutDb):
     @property
     def new_path(self):
         return 'mwe'
-
-class ClusteredTacHandler(CalculationHandlerWithoutDb):
-    """Tac after clustering"""
-    _name = 'clustered_tac'
-
-class ColorizedWhiskerEndsHandler(CalculationHandlerWithoutDb):
-    """Whisker ends after colorizing"""
-    _name = 'colorized_whisker_ends'
-    
-class ContactsSummaryHandler(CalculationHandlerWithoutDb):
-    """Contacts summmary"""
-    _name = 'contacts_summary'
 
 class VideoTrackedWhiskersHandler(CalculationHandlerWithoutDb):
     """Tracked whiskers video. Side effect of trace"""
