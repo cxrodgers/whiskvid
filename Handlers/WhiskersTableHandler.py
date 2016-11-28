@@ -1,7 +1,7 @@
 """Module for handling whiskers table"""
 import numpy as np
 import pandas
-from Handlers import CalculationHandler
+from base import CalculationHandler
 try:
     import tables
 except ImportError:

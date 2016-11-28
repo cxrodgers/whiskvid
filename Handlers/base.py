@@ -1,5 +1,5 @@
-import os
 import pandas
+import os
 
 class CalculationHandler(object):
     """Generic object for handling results of a calculation
