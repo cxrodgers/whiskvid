@@ -1986,18 +1986,22 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
 
 ##
 
-def get_triggered_whisker_angle(vsession, bsession, **kwargs):
+def get_triggered_whisker_angle(vsession, **kwargs):
     """Load the whisker angle from mwe and trigger on trial times
     
     This is a wrapper around get_triggered_whisker_angle_nodb
     """
-    db = whiskvid.db.load_db()
+    # Get masked whisker ends
+    mwe = vsession.data.whiskers.load_data()
+
+    # Get sync
+    v2b_fit = vsession.fit_v2b
     
-    mwe = whiskvid.get_masked_whisker_ends_db(vsession)
-    v2b_fit = db.loc[vsession,
-        ['fit_v2b0', 'fit_v2b1']].values.astype(np.float)
+    # Get trial matrix
+    bsession = vsession.bsession_name
     tm = BeWatch.db.get_trial_matrix(bsession, True)
     
+    # Trigger
     twa = get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, **kwargs)
     
     return twa
@@ -2028,9 +2032,16 @@ def get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, relative_time_bins=None):
 
     # Iterate over trigger times
     triggered_whisker_angle_l = []
+    trial_l = []
     for trial, trigger_time in rwin_open_times_by_trial.dropna().iteritems():
         # Get time bins relative to trigger
         absolute_time_bins = relative_time_bins + trigger_time
+        
+        # Skip if outside the range of data
+        if (
+            (absolute_time_bins.min() < angle_by_btime.index.values.min()) or
+            (absolute_time_bins.max() > angle_by_btime.index.values.max())):
+            continue
         
         # Reindex the data to these time bins
         resampled = angle_by_btime.reindex(
@@ -2040,15 +2051,20 @@ def get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, relative_time_bins=None):
         
         # Store
         triggered_whisker_angle_l.append(resampled)
+        trial_l.append(trial)
 
     # DataFrame the result keyed by trial
     twa = pandas.DataFrame(
         index=relative_time_bins,
-        columns=rwin_open_times_by_trial.dropna().index,
+        columns=trial_l,
         data=np.transpose(triggered_whisker_angle_l))
 
-    # Drop trials with missing data at the beginning and end of the video
-    twa = twa.dropna(1)
+    #~ # Drop trials with missing data at the beginning and end of the video
+    #~ twa = twa.dropna(1)
+    # Used to be that NaNs were put in instead of extrapolating
+    # But now I think they are extrapolated
+    # So we can't check for NaN to see if extrapolation happened
+    assert not np.any(np.isnan(twa.values))
     
     return twa
 
