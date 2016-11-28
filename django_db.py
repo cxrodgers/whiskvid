@@ -57,6 +57,9 @@ class VideoSession(object):
             # Store
             setattr(self.data, handler._name, handler)
 
+    def __str__(self):
+        return "Python VideoSession for %s" % self._django_object
+
     ## Initializing shortcut
     @classmethod
     def from_name(self, name, forced_root_directory=None, **kwargs):

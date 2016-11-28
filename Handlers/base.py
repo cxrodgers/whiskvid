@@ -14,6 +14,9 @@ class CalculationHandler(object):
         """Initalize a new handler for this video session"""
         self.video_session = video_session
     
+    def __str__(self):
+        return "%s handler for %s" % (self._name, str(self.video_session))
+    
     def _get_field(self):
         """Return the value stored at _db_field_path"""
         # Refresh db
