@@ -911,7 +911,6 @@ def put_whiskers_into_hdf5(session, db=None, **kwargs):
     put_whiskers_into_hdf5_nodb(row['whiskers'], db.loc[session, 'wseg_h5'],
         **kwargs)
 
-
 def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
     flush_interval=100000, truncate_seg=None):
     """Load data from whisk_file and put it into an hdf5 file
@@ -991,93 +990,6 @@ def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
             table.flush()
 
     h5file.close()    
-
-
-def get_whisker_ends_hdf5(hdf5_file=None, side=None, 
-    also_calculate_length=True):
-    """Reimplement get_whisker_ends on hdf5 file"""
-    import tables
-    # Get the summary
-    with tables.open_file(hdf5_file) as fi:
-        summary = pandas.DataFrame.from_records(fi.root.summary.read())
-    
-    # Rename
-    summary = summary.rename(columns={'time': 'frame', 'id': 'seg'})
-    
-    # Assign tip and follicle
-    if side == 'left':
-        # Identify which are backwards
-        switch_mask = summary['tip_x'] < summary['fol_x']
-        
-        # Switch those rows
-        new_summary = summary.copy()
-        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
-        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
-        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
-        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
-        summary = new_summary
-    elif side == 'right':
-        # Like left, but x is switched
-        
-        # Identify which are backwards
-        switch_mask = summary['tip_x'] > summary['fol_x']
-        
-        # Switch those rows
-        new_summary = summary.copy()
-        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
-        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
-        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
-        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
-        summary = new_summary        
-    elif side == 'top':
-        # Identify which are backwards (0 at the top (?))
-        switch_mask = summary['tip_y'] < summary['fol_y']
-        
-        # Switch those rows
-        new_summary = summary.copy()
-        new_summary.loc[switch_mask, 'tip_x'] = summary.loc[switch_mask, 'fol_x']
-        new_summary.loc[switch_mask, 'fol_x'] = summary.loc[switch_mask, 'tip_x']
-        new_summary.loc[switch_mask, 'tip_y'] = summary.loc[switch_mask, 'fol_y']
-        new_summary.loc[switch_mask, 'fol_y'] = summary.loc[switch_mask, 'tip_y']
-        summary = new_summary        
-    elif side is None:
-        pass
-    else:
-        raise NotImplementedError
-
-    # length
-    if also_calculate_length:
-        summary['length'] = np.sqrt(
-            (summary['tip_y'] - summary['fol_y']) ** 2 + 
-            (summary['tip_x'] - summary['fol_x']) ** 2)
-    
-    return summary    
-
-## More HDF5 stuff
-def get_summary(h5file):
-    """Return summary metadata of all whiskers"""
-    return pandas.DataFrame.from_records(h5file.root.summary.read())
-
-def get_x_pixel_handle(h5file):
-    return h5file.root.pixels_x
-
-def get_y_pixel_handle(h5file):
-    return h5file.root.pixels_y
-
-def select_pixels(h5file, **kwargs):
-    summary = get_summary(h5file)
-    mask = my.pick(summary, **kwargs)
-    
-    # For some reason, pixels_x[fancy] is slow
-    res = [
-        np.array([
-            h5file.root.pixels_x[idx], 
-            h5file.root.pixels_y[idx], 
-            ])
-        for idx in mask]
-    return res
-## End HDF5 stuff
-
 
 ## cropping
 def crop_manual_params_db(session, interactive=True, **kwargs):
@@ -1412,69 +1324,6 @@ def calculate_contacts(h5_filename, edge_file, side, tac_filename=None,
     if not pandas.isnull(tac_filename):
         tips_and_contacts.to_pickle(tac_filename)
     return tips_and_contacts
-
-def get_masked_whisker_ends_db(session, add_angle=True,
-    add_sync=True, **kwargs):
-    """Wrapper around get_masked_whisker_ends that uses info from db
-    
-    kwargs are passed to get_masked_whisker_ends
-    
-    add_angle: uses the arctan2 method to add an angle column
-    add_sync: uses db sync to add vtime and btime columns
-    
-    Finally, an "angle" and 
-    """
-    db = whiskvid.db.load_db()
-    
-    mwe = whiskvid.get_masked_whisker_ends(
-        h5_filename=db.loc[session, 'wseg_h5'],
-        side=db.loc[session, 'side'],
-        fol_range_x=db.loc[session, ['fol_x0', 'fol_x1']].values, 
-        fol_range_y=db.loc[session, ['fol_y0', 'fol_y1']].values, 
-        **kwargs)
-
-    if add_angle:
-        # Get angle on each whisker
-        mwe['angle'] = np.arctan2(
-            -(mwe['fol_y'].values - mwe['tip_y'].values),
-            mwe['fol_x'].values - mwe['tip_x'].values) * 180 / np.pi
-
-    if add_sync:
-        # Get fit from video to behavior
-        if pandas.isnull(db.loc[session, 'fit_v2b0']):
-            print "warning: no sync information available"
-        else:
-            v2b_fit = db.loc[session,
-                ['fit_v2b0', 'fit_v2b1']].values.astype(np.float)
-            mwe['vtime'] = mwe['frame'] / 30.
-            mwe['btime'] = np.polyval(v2b_fit, mwe.vtime.values)    
-    
-    return mwe
-
-def get_masked_whisker_ends(h5_filename, side, 
-    fol_range_x, fol_range_y, length_thresh=75, 
-    verbose=True):
-    """Return a table of whiskers that has been masked by follicle and length
-    
-    """
-    # Get the ends
-    resdf = get_whisker_ends_hdf5(h5_filename, side=side)
-    if verbose:
-        print "whisker rows: %d" % len(resdf)
-
-    # Drop everything < thresh
-    resdf = resdf[resdf['length'] >= length_thresh]
-    if verbose:
-        print "whisker rows after length: %d" % len(resdf)
-
-    # Follicle mask
-    resdf = resdf[
-        (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
-        (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
-    if verbose:
-        print "whisker rows after follicle mask: %d" % len(resdf)    
-    
-    return resdf
 
 def purge_tac(session, db=None):
     """Delete the tac"""
