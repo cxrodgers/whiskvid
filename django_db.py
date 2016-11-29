@@ -158,6 +158,14 @@ class VideoSession(object):
             self._django_object.param_fol_y0,
             self._django_object.param_fol_y1,
         ])
+    
+    @property
+    def color2whisker(self):
+        whisker_color_l = self._django_object.whisker_colors.split()
+        res = {0: '?'}
+        for n, s in enumerate(whisker_color_l):
+            res[n + 1] = s
+        return res
 
 class NeuralSession(object):
     """Interface to all of the data about a neural session.
