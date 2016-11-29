@@ -1,6 +1,24 @@
 import pandas
 import os
 
+class Error(Exception):
+    """Base class for exceptions in this module"""
+    pass
+
+class FieldNotSetError(Error):
+    """When we try to get_path but the path hasn't been set"""
+    def __init__(self, field_name, vsession_s):
+        message = '%s / %s: field is unset' % (
+            vsession_s, field_name)
+        super(FieldNotSetError, self).__init__(message)
+
+class FileDoesNotExistError(Error):
+    """When the field is set but the file doesn't exist"""
+    def __init__(self, field_name, full_filename, vsession_s):
+        message = '%s / %s: file does not exist at %s' % (
+            vsession_s, field_name, full_filename)
+        super(FileDoesNotExist, self).__init__(message)
+
 class CalculationHandler(object):
     """Generic object for handling results of a calculation
     
@@ -49,16 +67,13 @@ class CalculationHandler(object):
         
         # Test if null
         if short_filename is None or short_filename == '':
-            raise ValueError("%s is not set in db for %s" % (
-                self._db_field_path, str(self.video_session)))
+            raise FieldNotSetError(self._db_field_path, str(self.video_session))
         
         # Raise exception if file doesn't exist?
-        full_filename = os.path.join(
-            self.video_session.session_path,
-            short_filename,
-        )
+        full_filename = self.new_path_full
         if not os.path.exists(full_filename):
-            raise IOError("file does not exist: %s" % full_filename)
+            raise FileDoesNotExist(self._db_field_path, full_filename,
+                str(self.video_session))
         
         # Return
         return full_filename
@@ -71,6 +86,12 @@ class CalculationHandler(object):
         for setting the database with.
         """
         return self._name
+    
+    @property
+    def new_path_full(self):
+        """Full new path including session directory"""
+        return os.path.join(self.video_session.session_path,
+            self.new_path)
 
     def set_path(self, new_path=None):
         """Set file in database
@@ -101,8 +122,7 @@ class CalculationHandler(object):
         """
         if self.field_is_null:
             # Generate the full new path
-            new_path = os.path.join(self.video_session.session_path, 
-                self.new_path)
+            new_path = self.new_path_full
 
             # If that file exists, then set it
             if os.path.exists(new_path):
@@ -119,7 +139,24 @@ class CalculationHandler(object):
         except (KeyError, IOError):
             # KeyError sometimes raise when unpickling a non-pickle
             raise IOError("cannot read pickle at %s" % filename)
-        return data        
+        return data   
+    
+    def save_data(self, data):
+        """Save data to location specified in new_path using pandas.to_pickle
+        
+        """
+        filename = self.new_path_full
+        
+        # Save
+        try:
+            data.to_pickle(filename)
+        except AttributeError:
+            raise ValueError("data cannot be pickled")
+        except IOError:
+            raise IOError("cannot write pickle at %s" % filename)
+        
+        # Set path
+        self.set_path()
 
     def calculate(self, **kwargs):
         pass
