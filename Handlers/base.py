@@ -17,7 +17,7 @@ class FileDoesNotExistError(Error):
     def __init__(self, field_name, full_filename, vsession_s):
         message = '%s / %s: file does not exist at %s' % (
             vsession_s, field_name, full_filename)
-        super(FileDoesNotExist, self).__init__(message)
+        super(FileDoesNotExistError, self).__init__(message)
 
 class CalculationHandler(object):
     """Generic object for handling results of a calculation
@@ -70,9 +70,10 @@ class CalculationHandler(object):
             raise FieldNotSetError(self._db_field_path, str(self.video_session))
         
         # Raise exception if file doesn't exist?
-        full_filename = self.new_path_full
+        full_filename = os.path.join(self.video_session.session_path,
+            short_filename)
         if not os.path.exists(full_filename):
-            raise FileDoesNotExist(self._db_field_path, full_filename,
+            raise FileDoesNotExistError(self._db_field_path, full_filename,
                 str(self.video_session))
         
         # Return
