@@ -172,3 +172,27 @@ class CalculationHandler(object):
     
     def set_manual_params_if_needed(self, **kwargs):
         pass
+
+    def _check_if_manual_params_set(self):
+        """Returns True if all manual params are already set in the db.
+        
+        These are the manual params that this Handler is capable of setting,
+        not the ones that are required for it to run (if any).
+        """
+        all_params_set = True
+        if hasattr(self, '_manual_param_fields'):
+            for attr in self._manual_param_fields:
+                if pandas.isnull(getattr(
+                    self.video_session._django_object, attr)): 
+                    all_params_set = False
+        return all_params_set
+    
+    def _check_if_required_fields_for_calculate_set(self):
+        """Returns True if _required_fields_for_calculate are all set"""
+        all_params_set = True
+        if hasattr(self, '_required_fields_for_calculate'):
+            for attr in self._required_fields_for_calculate:
+                if pandas.isnull(getattr(
+                    self.video_session._django_object, attr)): 
+                    all_params_set = False
+        return all_params_set     
