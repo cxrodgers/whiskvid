@@ -19,6 +19,14 @@ class FileDoesNotExistError(Error):
             vsession_s, field_name, full_filename)
         super(FileDoesNotExistError, self).__init__(message)
 
+class RequiredFieldsNotSetError(Error):
+    """When we try to run a calculation but the prereqs are unset"""
+    def __init__(self, handler):
+        message = '%s: Some required fields are unset' % (
+            handler._name,
+        )
+        super(FieldNotSetError, self).__init__(message)    
+
 class CalculationHandler(object):
     """Generic object for handling results of a calculation
     

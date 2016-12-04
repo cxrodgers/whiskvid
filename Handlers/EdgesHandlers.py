@@ -6,6 +6,29 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 import my
 
+def get_int_input_with_default(name, value):
+    """Get an integer input with a default value"""
+    if value is None:
+        new_value_s = raw_input("Enter %s [default=None]:" % name)
+    else:
+        new_value_s = raw_input("Enter %s [default=%d]:" % (name, value))
+        
+    try:
+        new_value = int(new_value_s)
+    except (TypeError, ValueError):
+        new_value = value
+    
+    return new_value
+
+def get_string_input_with_default(name, value):
+    """Get an integer input with a default value"""
+    new_value_s = raw_input("Enter %s [default=%s]:" % (name, value))
+    new_value = new_value_s.strip()
+    
+    if new_value == '':
+        new_value = value
+
+    return new_value
 
 class AllEdgesHandler(CalculationHandler):
     """Handler for all_edges. 
@@ -24,12 +47,19 @@ class AllEdgesHandler(CalculationHandler):
     """
     _db_field_path = 'all_edges_filename'
     _name = 'all_edges'
-    _required_manual_param_fields = (
+    
+    # The params this handler helps set
+    _manual_param_fields = (
         'param_face_side', 
         'param_edge_x0', 'param_edge_x1', 'param_edge_y0', 'param_edge_y1', 
         'param_edge_lumthresh', 'param_edge_split_iters',
         'param_edge_crop_x0', 'param_edge_crop_x1', 
         'param_edge_crop_y0', 'param_edge_crop_y1', 
+    )
+    
+    # The fields that are required before calculate can run
+    _required_fields_for_calculate = (
+        'monitor_video',
     )
     
     def load_data(self):
@@ -41,21 +71,88 @@ class AllEdgesHandler(CalculationHandler):
         return data
 
     def _check_if_manual_params_set(self):
-        """Returns True if all required manual params are set in the db"""
+        """Returns True if all manual params are already set in the db.
+        
+        These are the manual params that this Handler is capable of setting,
+        not the ones that are required for it to run (if any).
+        """
         all_params_set = True
-        for attr in self._required_manual_param_fields:
+        for attr in self._manual_param_fields:
             if pandas.isnull(getattr(self.video_session._django_object, attr)): 
                 all_params_set = False
         return all_params_set
-        
+    
+    def _check_if_required_fields_for_calculate_set(self):
+        """Returns True if _required_fields_for_calculate are all set"""
+        all_params_set = True
+        for attr in self._required_fields_for_calculate:
+            if pandas.isnull(getattr(self.video_session._django_object, attr)): 
+                all_params_set = False
+        return all_params_set        
+    
     def choose_manual_params(self, force=False):
-        """Interactively get the necessary manual params"""
+        """Interactively get the necessary manual params
+        
+        This is a two-stage process. First we simply plot a subset of the
+        frames and request the edge ROI, lumthresh, and face side.
+        
+        Secondly we extract edges from a subset of frames (using the
+        params from the first stage) and request the crop params. The user
+        may also want to change the params from the first part based on this
+        result.
+        """
         # Return if force=False and all params already set
         if not force and self._check_if_manual_params_set():
             return
         
+        # Shortcut
+        vs_obj = self.video_session._django_object
         
+        # Get the edge roi, lumthresh, and face side
+        monitor_video_filename = self.video_session.data.monitor_video.get_path
+        manual_params = choose_manual_params_nodb(
+            monitor_video_filename, interactive=True,
+            side=vs_obj.get_param_face_side_display(),
+            edge_x0=vs_obj.param_edge_x0, 
+            edge_x1=vs_obj.param_edge_x1, 
+            edge_y0=vs_obj.param_edge_y0, 
+            edge_y1=vs_obj.param_edge_y1, 
+            lumthresh=vs_obj.param_edge_lumthresh,         
+        )
         
+        # Set them in the database
+        side2int = dict([(v, k) 
+            for k, v in vs_obj.param_face_choices])
+        vs_obj.param_face_side = side2int[manual_params['side']]
+        vs_obj.param_edge_lumthresh = manual_params['edge_lumthresh']
+        vs_obj.param_edge_x0 = manual_params['edge_roi_x0']        
+        vs_obj.param_edge_x1 = manual_params['edge_roi_x1']        
+        vs_obj.param_edge_y0 = manual_params['edge_roi_y0']        
+        vs_obj.param_edge_y1 = manual_params['edge_roi_y1']        
+        vs_obj.save()
+        
+        ## Second stage
+        # Get the crop manual params
+        debug_frametimes = np.linspace(100., 7000., 16)
+        crop_params = choose_crop_params_nodb(
+            video_file=monitor_video_filename,
+            frametimes=debug_frametimes, 
+            side=vs_obj.get_param_face_side_display(),
+            edge_x0=vs_obj.param_edge_x0, 
+            edge_x1=vs_obj.param_edge_x1, 
+            edge_y0=vs_obj.param_edge_y0, 
+            edge_y1=vs_obj.param_edge_y1, 
+            lumthresh=vs_obj.param_edge_lumthresh, 
+            split_iters=vs_obj.param_edge_split_iters,
+            crop_params_init=None,
+        )
+        
+        # Set the crop manual params
+        vs_obj.param_crop_x0 = crop_params[0]
+        vs_obj.param_crop_x1 = crop_params[1]
+        vs_obj.param_crop_y0 = crop_params[2]
+        vs_obj.param_crop_y1 = crop_params[3]
+        vs_obj.save()
 
     def calculate(self, force=False, save=True):
         """Calculate edges using calculate_all_edges_nodb
@@ -84,6 +181,11 @@ class AllEdgesHandler(CalculationHandler):
                     "but could not load data, recalculating" 
                 )
         
+        # We are going to try to calculate
+        # Ensure required fields are set
+        if not self._check_if_required_fields_for_calculate_set():
+            raise RequiredFieldsNotSetError(self)
+        
         ## Begin handler-specific stuff
         # Load necessary data
         ctac = self.video_session.data.clustered_tac.load_data()
@@ -101,25 +203,25 @@ class AllEdgesHandler(CalculationHandler):
         return ccs
 
 
-def calculate_all_edges_nodb():
-    ## edge them
-    print "edge"
-    db = whiskvid.db.load_db()
-    for session in subdb.index:
-        row = db.ix[session]
-        if pandas.isnull(row['edge']) or not os.path.exists(row['edge']):
-            print session
+#~ def calculate_all_edges_nodb():
+    #~ ## edge them
+    #~ print "edge"
+    #~ db = whiskvid.db.load_db()
+    #~ for session in subdb.index:
+        #~ row = db.ix[session]
+        #~ if pandas.isnull(row['edge']) or not os.path.exists(row['edge']):
+            #~ print session
             
-            # Determine whether we need to set manual params
-            run_manual_params = False
-            trigger_params = ['edge_roi_x0', 'edge_lumthresh', 'side']
-            for trigger_param in trigger_params:
-                if trigger_param not in db or pandas.isnull(row[trigger_param]):
-                    run_manual_params = True
+            #~ # Determine whether we need to set manual params
+            #~ run_manual_params = False
+            #~ trigger_params = ['edge_roi_x0', 'edge_lumthresh', 'side']
+            #~ for trigger_param in trigger_params:
+                #~ if trigger_param not in db or pandas.isnull(row[trigger_param]):
+                    #~ run_manual_params = True
         
-            # Get params if none exist
-            if run_manual_params:
-                whiskvid.edge_frames_manual_params_db(session)
+            #~ # Get params if none exist
+            #~ if run_manual_params:
+                #~ whiskvid.edge_frames_manual_params_db(session)
 
             # Debugging
             # Can set these parameters manually to see what works
@@ -134,11 +236,11 @@ def calculate_all_edges_nodb():
                 #~ )
             #~ 1/0
             
-            # Run the edging
-            whiskvid.edge_frames(session, verbose=True, 
-                split_iters=5,
-                crop_x0=0, crop_x1=525, crop_y0=200, crop_y1=600,
-                )
+            #~ # Run the edging
+            #~ whiskvid.edge_frames(session, verbose=True, 
+                #~ split_iters=5,
+                #~ crop_x0=0, crop_x1=525, crop_y0=200, crop_y1=600,
+                #~ )
 
 
 class EdgeSummaryHandler(CalculationHandler):
@@ -457,49 +559,17 @@ def plot_edge_subset(edge_a, stride=200, xlim=(0, 640), ylim=(480, 0)):
     ax.set_ylim(ylim)
     plt.show()
 
+def choose_manual_params_nodb(video_file, interactive=True,
+    side=None, edge_x0=None, edge_x1=None, edge_y0=None, edge_y1=None,
+    lumthresh=None):
+    """Interactively set the parameters for edging.
 
-
-def edge_frames_manual_params_db(session, interactive=True, **kwargs):
-    """Interactively set lum thresh and roi for edging
-    
     This ROI will be used to identify which of the dark shapes in the object
     is the stimulus. Typically, we choose the largest shape that has any
     part of itself in the ROI. Thus, choose the ROI such that the face is never
     included, but some part of the shape is always included.
     
-    Requires: row['vfile'] to exist
-    Sets: edge_roi_x, edge_roi_y, edge_lumthresh
-    """
-    # Get metadata
-    db = whiskvid.db.load_db()
-    db_changed = False
-    row = db.ix[session]
-    
-    # Get manual params
-    if pandas.isnull(row['vfile']):
-        raise ValueError("no vfile for", session)
-    params = edge_frames_manual_params(row['vfile'], 
-        interactive=interactive, **kwargs)
-    
-    # Save in db
-    for key, value in params.items():
-        if key in db:
-            if not pandas.isnull(db.loc[session, key]):
-                print "warning: overwriting %s in %s" % (key, session)
-        else:
-            print "warning: adding %s as a param" % key
-        db.loc[session, key] = value
-        db_changed = True
-    
-    # Save db
-    if db_changed:
-        whiskvid.db.save_db(db)     
-    else:
-        print "no changes made to edge in", session
-
-
-def edge_frames_manual_params(video_file, interactive=True, **kwargs):
-    """Interactively set the parameters for edging.
+    Requires monitor video to exist.
     
     Takes the first 10000 frames of the video. Sorts the frames by those
     that have minimal intensity in the upper right corner. Plots a subset
@@ -513,6 +583,15 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     the face.
     
     Finally the user inputs the face side.
+    
+    Params:
+        video_file : filename of monitor video
+        interactive : passed to my.video.choose_rectangular_ROI
+        all other kwargs : the current or default values of the params,
+            or None. These are simply displayed as a hint for the user
+            while respecifying.
+    
+    Returns: dict with keys edge_roi_*, edge_lumthresh, side
     """
     width, height = my.video.get_video_aspect(video_file)
     
@@ -535,9 +614,7 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
 
     # Get the shape roi
     res = my.video.choose_rectangular_ROI(video_file, interactive=interactive,
-        **kwargs)
-    #~ if len(res) == 0:
-        #~ return res
+        hints={'x0': edge_x0, 'x1': edge_x1, 'y0': edge_y0, 'y1': edge_y1})
     
     # Rename the keys
     res2 = {}
@@ -545,14 +622,10 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
         res2['edge_roi_' + key] = res[key]
 
     # Get the lum_threshold
-    lumthresh_s = raw_input("Enter lum threshold (eg, 50): ")
-    lumthresh_int = int(lumthresh_s)
-    res2['edge_lumthresh'] = lumthresh_int
+    res2['edge_lumthresh'] = get_int_input_with_default('lumthresh', lumthresh)
 
     # Get the face side
-    side_s = raw_input(
-        "Enter face side (eg, 'top', 'left' but without quotes): ")
-    res2['side'] = side_s
+    res2['side'] = get_string_input_with_default('face side', side)
 
     #~ ## replot figure with params
     #~ f, axa = plt.subplots(3, 3)
@@ -567,54 +640,54 @@ def edge_frames_manual_params(video_file, interactive=True, **kwargs):
     return res2
 
 
-def edge_frames(session, db=None, debug=False, **kwargs):
-    """Edges the frames and updates db
+#~ def edge_frames(session, db=None, debug=False, **kwargs):
+    #~ """Edges the frames and updates db
     
-    If debug: returns frames, edge_a and does not update db
-    """
-    if db is None:
-        db = whiskvid.db.load_db()
-    row = db.ix[session]
+    #~ If debug: returns frames, edge_a and does not update db
+    #~ """
+    #~ if db is None:
+        #~ db = whiskvid.db.load_db()
+    #~ row = db.ix[session]
     
-    # Generate output file name
-    if pandas.isnull(db.loc[session, 'edge']):
-        output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
-    else:
-        print "already edged, returning"
-        return
+    #~ # Generate output file name
+    #~ if pandas.isnull(db.loc[session, 'edge']):
+        #~ output_file = whiskvid.db.EdgesAll.generate_name(row['session_dir'])
+    #~ else:
+        #~ print "already edged, returning"
+        #~ return
     
-    # A better default for side
-    if 'side' in kwargs:
-        side = kwargs.pop('side')
-    elif pandas.isnull(row['side']):
-        print "warning: side is null, using left"
-        side = 'left'
-    else:
-        side = row['side']
+    #~ # A better default for side
+    #~ if 'side' in kwargs:
+        #~ side = kwargs.pop('side')
+    #~ elif pandas.isnull(row['side']):
+        #~ print "warning: side is null, using left"
+        #~ side = 'left'
+    #~ else:
+        #~ side = row['side']
     
-    # Form the params
-    kwargs = kwargs.copy()
-    for kwarg in ['edge_roi_x0', 'edge_roi_x1', 
-        'edge_roi_y0', 'edge_roi_y1']:
-        kwargs[kwarg] = row[kwarg]
-    kwargs['lum_threshold'] = row['edge_lumthresh']
+    #~ # Form the params
+    #~ kwargs = kwargs.copy()
+    #~ for kwarg in ['edge_roi_x0', 'edge_roi_x1', 
+        #~ 'edge_roi_y0', 'edge_roi_y1']:
+        #~ kwargs[kwarg] = row[kwarg]
+    #~ kwargs['lum_threshold'] = row['edge_lumthresh']
     
-    # Depends on debug
-    if debug:
-        frames, edge_a = edge_frames_nodb(
-            row['vfile'], output_file, side=side, debug=True,
-            **kwargs)
+    #~ # Depends on debug
+    #~ if debug:
+        #~ frames, edge_a = edge_frames_nodb(
+            #~ row['vfile'], output_file, side=side, debug=True,
+            #~ **kwargs)
         
-        return frames, edge_a
-    else:
-        edge_frames_nodb(
-            row['vfile'], output_file, side=side, debug=False,
-            **kwargs)
+        #~ return frames, edge_a
+    #~ else:
+        #~ edge_frames_nodb(
+            #~ row['vfile'], output_file, side=side, debug=False,
+            #~ **kwargs)
     
-    # Update the db
-    db = whiskvid.db.load_db()
-    db.loc[session, 'edge'] = output_file
-    whiskvid.db.save_db(db)      
+    #~ # Update the db
+    #~ db = whiskvid.db.load_db()
+    #~ db.loc[session, 'edge'] = output_file
+    #~ whiskvid.db.save_db(db)      
 
 
 def edge_frames_nodb(video_file, edge_file, 
@@ -652,90 +725,102 @@ def edge_frames_nodb(video_file, edge_file,
             print "debug mode; lowering n_frames"
         
         # Get raw frames
-        frames = whiskvid.get_all_edges_from_video(video_file,
+        frames = get_all_edges_from_video(video_file,
             return_frames_instead=True, **kwargs)        
         
         # Get edges from those frames
-        edge_a = whiskvid.get_all_edges_from_video(video_file,
+        edge_a = get_all_edges_from_video(video_file,
             return_frames_instead=False, **kwargs)
         
         return frames, edge_a
     
     else:
         # Get edges
-        edge_a = whiskvid.get_all_edges_from_video(video_file,
+        edge_a = get_all_edges_from_video(video_file,
             return_frames_instead=False, **kwargs)
 
         # Save
         np.save(edge_file, edge_a)
 
         # Plot
-        whiskvid.plot_edge_subset(edge_a, stride=stride,    
+        plot_edge_subset(edge_a, stride=stride,    
             xlim=(0, width), ylim=(height, 0))
 
-def purge_edge_frames(session, db=None):
-    """Delete the results of the edged frames.
+#~ def purge_edge_frames(session, db=None):
+    #~ """Delete the results of the edged frames.
     
-    Probably you want to purge the edge summary as well.
-    """
-    # Get the filename
-    if db is None:
-        db = whiskvid.db.load_db()
-    row = db.ix[session]
-    edge_file = db.loc[session, 'edge']
+    #~ Probably you want to purge the edge summary as well.
+    #~ """
+    #~ # Get the filename
+    #~ if db is None:
+        #~ db = whiskvid.db.load_db()
+    #~ row = db.ix[session]
+    #~ edge_file = db.loc[session, 'edge']
     
-    # Try to purge it
-    if pandas.isnull(edge_file):
-        print "no edge file to purge"
-    elif not os.path.exists(edge_file):
-        print "cannot find edge file to purge: %r" % edge_file
-    else:
-        os.remove(edge_file)
-    
-def edge_frames_debug_plot(session, frametimes, split_iters=7,
-    crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
-    roi_x=None, roi_y=None, lumthresh=None, side=None,
+    #~ # Try to purge it
+    #~ if pandas.isnull(edge_file):
+        #~ print "no edge file to purge"
+    #~ elif not os.path.exists(edge_file):
+        #~ print "cannot find edge file to purge: %r" % edge_file
+    #~ else:
+        #~ os.remove(edge_file)
+
+def choose_crop_params_nodb(video_file, frametimes, 
+    side, edge_x0, edge_x1, edge_y0, edge_y1, lumthresh, split_iters,
+    crop_params_init=None,
     ):
-    """This is a helper function for debugging edging.
+    """Manual param selection for edge cropping.
     
     For some subset of frames, plot the raw frame, the detected edge,
-    the thresholded frame and (TODO) the detected objects.
+    the thresholded frame and the detected objects.
     
     Uses whiskvid.get_all_edges_from_video to get the intermediate results,
     and then plots them. Also returns all intermediate results.
     
     frametimes : which frames to analyze as a test
-    
-    roi_x, roi_y, lumthresh, side : can be provided, or else will be taken
-        from db
     """
     import my.plot 
     
     if len(frametimes) > 64:
         raise ValueError("too many frametimes")
     
-    # Get raw frames, binframes, edges, on a subset
-    db = whiskvid.db.load_db()
-    v_width, v_height = db.loc[session, 'v_width'], db.loc[session, 'v_height']
-    video_file = db.loc[session, 'vfile']
+    # Initialize the crop params with the edge params
+    if crop_params_init is None:
+        crop_x0, crop_x1, crop_y0, crop_y1 = (
+            edge_x0, edge_x1, edge_y0, edge_y1)
+    else:
+        crop_x0, crop_x1, crop_y0, crop_y1 = crop_params_init
     
-    # Get params from db if necessary
-    if side is None:
-        side = db.loc[session, 'side']
-    if roi_x is None:
-        roi_x = (db.loc[session, 'edge_roi_x0'], db.loc[session, 'edge_roi_x1'])
-    if roi_y is None:
-        roi_y = (db.loc[session, 'edge_roi_y0'], db.loc[session, 'edge_roi_y1'])
-    if lumthresh is None:
-        lumthresh = db.loc[session, 'edge_lumthresh']
+    # Iteratively select the crop params
+    while True:
+        # Gets the edges from subset of debug frames using provided parameters
+        debug_res = get_all_edges_from_video(video_file, 
+            crop_x0=crop_x0, crop_x1=crop_x1, crop_y0=crop_y0, crop_y1=crop_y1,
+            roi_x=(edge_x0, edge_x1), roi_y=(edge_y0, edge_y1),
+            split_iters=split_iters, side=side,
+            lum_threshold=lumthresh,
+            debug=True, debug_frametimes=frametimes)    
+        
+        # Plot result
+        plot_effect_of_crop_params(frametimes, debug_res)
+        
+        confirm_input = raw_input("Confirm? [y/N]:")
+        if confirm_input.lower().strip() == 'y':
+            break
+        
+        # Get input
+        crop_x0 = get_int_input_with_default('crop_x0', crop_x0)
+        crop_x1 = get_int_input_with_default('crop_x1', crop_x1)
+        crop_y0 = get_int_input_with_default('crop_y0', crop_y0)
+        crop_y1 = get_int_input_with_default('crop_y1', crop_y1)
     
-    # Gets the edges from subset of debug frames using provided parameters
-    debug_res = whiskvid.get_all_edges_from_video(video_file, 
-        crop_x0=crop_x0, crop_x1=crop_x1, crop_y0=crop_y0, crop_y1=crop_y1,
-        roi_x=roi_x, roi_y=roi_y, split_iters=split_iters, side=side,
-        lum_threshold=lumthresh,
-        debug=True, debug_frametimes=frametimes)    
+    return crop_x0, crop_x1, crop_y0, crop_y1
+
+def plot_effect_of_crop_params(frametimes, debug_res):
+    """Plots the detected edges to help choose crop params
     
+    debug_res : result of whiskvid.get_all_edges_from_video
+    """
     # Plot them
     f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
     f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True, figsize=(12, 12))
@@ -775,7 +860,6 @@ def edge_frames_debug_plot(session, frametimes, split_iters=7,
     f.tight_layout()
     f2.tight_layout()
     plt.show()    
-    return debug_res
 
 ## End of functions for extracting objects from video
 
