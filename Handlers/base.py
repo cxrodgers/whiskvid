@@ -92,7 +92,8 @@ class CalculationHandler(object):
         """Generate a new filename
         
         This will not be a full path, but a short filename, suitable
-        for setting the database with.
+        for setting the database with. By default we use self._name,
+        but this can be overridden if desired.
         """
         return self._name
     
@@ -141,7 +142,11 @@ class CalculationHandler(object):
                 return self.get_path
 
     def load_data(self):
-        """Read data or raise IOError"""
+        """Read data or raise IOError
+        
+        This implementation uses pandas.read_pickle, as does save_data.
+        Override if another method is desired.
+        """
         filename = self.get_path
         try:
             data = pandas.read_pickle(filename)
@@ -151,8 +156,17 @@ class CalculationHandler(object):
         return data   
     
     def save_data(self, data):
-        """Save data to location specified in new_path using pandas.to_pickle
+        """Save data to disk and set the database path.
         
+        Saves data to the location specified in self.new_path. Then calls
+        self.set_path() to set the database field. Finally return
+        self.get_path, which should be the new full filename, and will
+        raise FileNotFoundError if something went wrong.
+        
+        This implementation uses pandas.to_pickle. Override if another
+        method is desired.
+        
+        Returns: string, full path to written file
         """
         filename = self.new_path_full
         
@@ -166,6 +180,9 @@ class CalculationHandler(object):
         
         # Set path
         self.set_path()
+
+        # This should now work
+        return self.get_path
 
     def calculate(self, **kwargs):
         pass

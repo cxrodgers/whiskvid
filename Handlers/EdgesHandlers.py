@@ -61,6 +61,11 @@ class AllEdgesHandler(CalculationHandler):
     _required_fields_for_calculate = (
         'monitor_video',
     )
+
+    # Override because it's not just _name
+    @property
+    def new_path(self):
+        return 'all_edges.npy'
     
     def load_data(self):
         """Override load_data because edges_all uses numpy.load"""
@@ -72,7 +77,10 @@ class AllEdgesHandler(CalculationHandler):
         return data   
     
     def save_data(self, edge_a):
-        """Override save_data because edges_all uses numpy.save"""
+        """Save data to disk and set the database path.
+        
+        This override uses numpy.save. See the base class for doc.
+        """
         filename = self.new_path_full
         
         # Save
@@ -83,6 +91,9 @@ class AllEdgesHandler(CalculationHandler):
         
         # Set path
         self.set_path()
+    
+        # This should now work
+        return self.get_path
     
     def choose_manual_params(self, force=False, crop_start=100.,
         crop_stop=7000., crop_n_frames=25):
@@ -153,6 +164,11 @@ class AllEdgesHandler(CalculationHandler):
         
         Returns : all_edges
         """
+        # Actually probably should just return immediately if the result
+        # exists, and not bother recalculating. Nor should it return data
+        # in any case. That's because we probably don't want to incur the
+        # overhead of loading unless load_data is specifically called.
+        
         # Return if force=False and we can load the data
         if not force:
             failed_to_read_data = False
