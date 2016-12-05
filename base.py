@@ -112,7 +112,6 @@ def load_whisker_positions(whisk_file, measure_file, side='left'):
     
     return angl_df
 
-
 def angle_meth1(wsx, wsy, side):
     """Fit angle by lstsqs line fit, then arctan, then pin.
     
@@ -200,9 +199,6 @@ def assign_tip_and_follicle(x0, x1, y0, y1, side=None):
             return x1, x0, y1, y0
     else:
         raise ValueError("unknown value for side: %s" % side)
-
-
-
 
 def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
     side=None, also_calculate_length=True):
@@ -357,73 +353,6 @@ def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
             table.flush()
 
     h5file.close()    
-
-## cropping
-def crop_manual_params_db(session, interactive=True, **kwargs):
-    """Get crop size and save to db"""
-    # Get metadata
-    db = whiskvid.db.load_db()
-    db_changed = False
-    row = db.ix[session]
-    
-    # Get manual params
-    if pandas.isnull(row['input_vfile']):
-        raise ValueError("no input_vfile for", session)
-    params = crop_manual_params(row['input_vfile'], 
-        interactive=interactive, **kwargs)
-    
-    # Save in db
-    for key, value in params.items():
-        if not pandas.isnull(db.loc[session, key]):
-            print "warning: overwriting %s in %s" % (key, session)
-        db.loc[session, key] = value
-        db_changed = True
-    
-    # Save db
-    if db_changed:
-        whiskvid.db.save_db(db)     
-    else:
-        print "no changes made to crop in", session
-
-def crop_manual_params(vfile, interactive=True, **kwargs):
-    """Use choose_rectangular_ROI to set cropping params"""
-    res = my.video.choose_rectangular_ROI(vfile, interactive=interactive,
-        **kwargs)
-    
-    if len(res) == 0:
-        return res
-    
-    # Rename the keys
-    res2 = {}
-    for key in res:
-        res2['crop_' + key] = res[key]
-    return res2    
-
-def crop_session(session, db=None, **kwargs):
-    """Crops the input file into the output file, and updates db"""
-    if db is None:
-        db = whiskvid.db.load_db()
-    row = db.ix[session]
-    
-    # Generate output file name
-    if pandas.isnull(db.loc[session, 'vfile']):
-        output_file = os.path.join(row['session_dir'], session + '_cropped.mp4')
-        db.loc[session, 'vfile'] = output_file
-    
-    crop_session_nodb(row['input_vfile'], db.loc[session, 'vfile'],
-        row['crop_x0'], row['crop_x1'], row['crop_y0'], row['crop_y1'],
-        **kwargs)
-
-    # Save
-    whiskvid.db.save_db(db)  
-
-def crop_session_nodb(input_file, output_file, crop_x0, crop_x1, 
-    crop_y0, crop_y1, **kwargs):
-    """Crops the input file into the output file"""
-    my.video.crop(input_file, output_file, crop_x0, crop_x1, 
-        crop_y0, crop_y1, **kwargs)
-
-## end cropping
 
 ## tracing
 def trace_session(session, db=None, create_monitor_video=False, 
@@ -709,172 +638,6 @@ def purge_tac(session, db=None):
         os.remove(tac_file)
 
 ## End calculating contacts
-
-
-
-## Edge summary dumping
-def dump_edge_summary(session, db=None, **kwargs):
-    """Calls `dump_edge_summary_nodb` on `session`"""
-    if db is None:
-        db = whiskvid.db.load_db()
-    
-    # Get behavior df
-    bfile_name = db.loc[session, 'bfile']
-    if pandas.isnull(bfile_name) or not os.path.exists(bfile_name):
-        raise IOError("cannot find bfile for %s" % session)
-    trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
-    if 'choice_time' not in trial_matrix:
-        trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(bfile_name)
-
-    # Get edges
-    edge_a = whiskvid.db.EdgesAll.load(db.loc[session, 'edge'])
-    b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
-    v_width, v_height = my.video.get_video_aspect(db.loc[session, 'vfile'])
-    
-    # Set up edge summary filename
-    db_changed = False
-    if pandas.isnull(db.loc[session, 'edge_summary']):
-        db.loc[session, 'edge_summary'] = whiskvid.db.EdgesSummary.generate_name(
-            db.loc[session, 'session_dir'])
-        db_changed = True
-    edge_summary_filename = db.loc[session, 'edge_summary']
-    
-    # Dump edge summary
-    dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
-        edge_summary_filename=edge_summary_filename,
-        **kwargs)
-    
-    if db_changed:
-        whiskvid.db.save_db(db)
-    
-def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
-    edge_summary_filename=None,
-    hist_pix_w=2, hist_pix_h=2, vid_fps=30, offset=-.5):
-    """Extract edges at choice times for each trial type and dump
-    
-    2d-histograms at choice times and saves the resulting histogram
-    
-    trial_matrix : must have choice time added in already
-    edge_a : array of edge at every frame
-    offset : time relative to choice time at which frame is dumped
-    edge_summary_filename : where to dump results, if anywhere
-    
-    Check if there is a bug here when the edge is in the last row and is
-    not in the histogram.
-    
-    Returns: {
-        'row_edges': row_edges, 'col_edges': col_edges, 
-        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}    
-    """
-    # Convert choice time to frames using b2v_fit
-    choice_btime = np.polyval(b2v_fit, trial_matrix['choice_time'])
-    choice_btime = choice_btime + offset
-    trial_matrix['choice_bframe'] = np.rint(choice_btime * vid_fps)
-    
-    # hist2d the edges for each rewside * servo_pos
-    gobj = trial_matrix.groupby(['rewside', 'servo_pos'])
-    rwsd_l, srvpos_l, H_l = [], [], []
-    col_edges = np.arange(0, v_width, hist_pix_w)
-    row_edges = np.arange(0, v_height, hist_pix_h)    
-    for (rwsd, srvpos), subtm in gobj:
-        # Extract the edges at choice time from all trials of this type
-        n_bad_edges = 0
-        sub_edge_a = []
-        for frame in subtm['choice_bframe'].values:
-            # Skip ones outside the video
-            if frame < 0 or frame >= len(edge_a) or np.isnan(frame):
-                continue
-            
-            # Count the ones for which no edge was detected
-            elif edge_a[frame] is None:
-                n_bad_edges = n_bad_edges + 1
-                continue
-            
-            else:
-                sub_edge_a.append(edge_a[int(frame)])
-
-        # Warn
-        if n_bad_edges > 0:
-            print "warning: some edge_a entries are None at choice time"
-        if len(sub_edge_a) == 0:
-            print "warning: could not extract any edges for " \
-                "rwsd %s and srvpos %d" % (rwsd, srvpos)
-            continue
-        
-        # Extract rows and cols from sub_edge_a
-        col_coords = np.concatenate([edg[:, 0] for edg in sub_edge_a])
-        row_coords = np.concatenate([edg[:, 1] for edg in sub_edge_a])
-        
-        # Histogram it .. note H is X in first dim and Y in second dim
-        H, xedges, yedges = np.histogram2d(row_coords, col_coords,
-            bins=[col_edges, row_edges])
-        
-        # Store
-        rwsd_l.append(rwsd)
-        srvpos_l.append(srvpos)
-        H_l.append(H.T)
-    
-    # Save
-    res = {
-        'row_edges': row_edges, 'col_edges': col_edges, 
-        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}
-    if edge_summary_filename is not None:
-        my.misc.pickle_dump(res, edge_summary_filename)
-    return res
-## End edge summary dumping
-
-## Frame dumping
-#~ def dump_frames(session, db=None):
-    #~ """Calls `dump_frames_nodb` on `session`
-    
-    #~ This has all been moved into 
-        #~ make_overlay_image_nodb
-    #~ to use newer frame extraction methods. Could be broken out again,
-    #~ probably.
-    #~ """
-    #~ if db is None:
-        #~ db = whiskvid.db.load_db()    
-
-    #~ # Get behavior df
-    #~ bfilename = db.loc[session, 'bfile']
-    #~ b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
-    #~ video_file = db.loc[session, 'vfile']
-    
-    #~ # Set up filename
-    #~ db_changed = False
-    #~ if pandas.isnull(db.loc[session, 'frames']):
-        #~ db.loc[session, 'frames'] = whiskvid.db.TrialFramesDir.generate_name(
-            #~ db.loc[session, 'session_dir'])
-        #~ db_changed = True
-    #~ frame_dir = db.loc[session, 'frames']
-    
-    #~ # Dump frames   
-    #~ dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir)
-
-    #~ if db_changed:
-        #~ whiskvid.db.save_db(db)
-
-#~ def dump_frames_nodb(bfilename, b2v_fit, video_file, frame_dir):
-    #~ """Dump frames at servo retraction time
-    
-    #~ This has all been moved into 
-        #~ make_overlay_image_nodb
-    #~ to use newer frame extraction methods. Could be broken out again,
-    #~ probably.    
-    
-    #~ Wrapper around BeWatch.overlays.dump_frames_at_retraction_time
-    #~ """
-    #~ # overlays
-    #~ duration = my.video.get_video_duration(video_file)
-    #~ metadata = {'filename': bfilename, 'fit0': b2v_fit[0], 'fit1': b2v_fit[1],
-        #~ 'guess_vvsb_start': 0, 'filename_video': video_file, 
-        #~ 'duration_video': duration * np.timedelta64(1, 's')}
-    #~ if not os.path.exists(frame_dir):
-        #~ os.mkdir(frame_dir)
-        #~ BeWatch.overlays.dump_frames_at_retraction_time(metadata, frame_dir)
-    #~ else:
-        #~ print "not dumping frames, %s already exists" % frame_dir
-## End frame dumping
 
 ## Overlays
 def make_overlay_image(session, db=None, verbose=True, ax=None):
