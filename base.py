@@ -1160,42 +1160,49 @@ def get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, relative_time_bins=None):
         data=angle_by_frame.values)
     angle_by_btime.index.name = 'btime'
 
-    # Iterate over trigger times
-    triggered_whisker_angle_l = []
-    trial_l = []
-    for trial, trigger_time in rwin_open_times_by_trial.dropna().iteritems():
+    ## Interpolate angle_by_btime at the new time bins that we want
+    # Get absolute time bins
+    trigger_times = rwin_open_times_by_trial.dropna()
+    absolute_time_bins_l = []
+    for trial, trigger_time in trigger_times.iteritems():
         # Get time bins relative to trigger
         absolute_time_bins = relative_time_bins + trigger_time
-        
-        # Skip if outside the range of data
-        if (
-            (absolute_time_bins.min() < angle_by_btime.index.values.min()) or
-            (absolute_time_bins.max() > angle_by_btime.index.values.max())):
-            continue
-        
-        # Reindex the data to these time bins
-        resampled = angle_by_btime.reindex(
-            angle_by_btime.index | 
-            pandas.Index(absolute_time_bins)).interpolate(
-            'index').ix[absolute_time_bins]
-        
-        # Store
-        triggered_whisker_angle_l.append(resampled)
-        trial_l.append(trial)
-
-    # DataFrame the result keyed by trial
-    twa = pandas.DataFrame(
-        index=relative_time_bins,
-        columns=trial_l,
-        data=np.transpose(triggered_whisker_angle_l))
-
-    #~ # Drop trials with missing data at the beginning and end of the video
-    #~ twa = twa.dropna(1)
-    # Used to be that NaNs were put in instead of extrapolating
-    # But now I think they are extrapolated
-    # So we can't check for NaN to see if extrapolation happened
-    assert not np.any(np.isnan(twa.values))
+        absolute_time_bins_l.append(absolute_time_bins)
     
+    # Drop the ones before and after data
+    # By default pandas interpolate fills forward but not backward
+    absolute_time_bins_a = np.concatenate(absolute_time_bins_l)
+    absolute_time_bins_a_in_range = absolute_time_bins_a[
+        (absolute_time_bins_a < angle_by_btime.index.values.max()) &
+        (absolute_time_bins_a > angle_by_btime.index.values.min())
+    ].copy()
+    
+    # Make a bigger index with positions for each of the desired time bins
+    # Ensure it doesn't contain duplicates
+    new_index = (angle_by_btime.index | 
+        pandas.Index(absolute_time_bins_a_in_range))
+    new_index = new_index.drop_duplicates()
+    
+    # Interpolate
+    resampled_session = angle_by_btime.reindex(new_index).interpolate('index')
+    assert not np.any(resampled_session.isnull())
+
+    ## Extract interpolated times for each trial
+    # Take interpolated values at each of the absolute time bins
+    # Will be NaN before and after the data
+    interpolated = resampled_session.ix[absolute_time_bins_a]
+    assert interpolated.shape == absolute_time_bins_a.shape
+
+    ## Reshape
+    # One column per trial
+    twa = pandas.DataFrame(
+        interpolated.values.reshape(
+            (len(trigger_times), len(relative_time_bins))).T,
+        index=relative_time_bins, columns=trigger_times.index
+    )
+
+    # Drop trials with any missing data (should be at beginning and end)
+    twa = twa.dropna(1)
     return twa
 
 
