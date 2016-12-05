@@ -5,6 +5,7 @@ import pandas
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import my
+import BeWatch
 
 def get_int_input_with_default(name, value):
     """Get an integer input with a default value"""
@@ -224,6 +225,97 @@ class AllEdgesHandler(CalculationHandler):
 class EdgeSummaryHandler(CalculationHandler):
     _db_field_path = 'edge_summary_filename'
     _name = 'edge_summary'
+
+    # The fields that are required before calculate can run
+    _required_fields_for_calculate = (
+        'all_edges_filename',
+    )
+
+    def load_data(self):
+        """Override load_data to use my.misc.pickle_load"""
+        filename = self.get_path
+        try:
+            data = my.misc.pickle_load(filename)
+        except IOError:
+            raise IOError("no edge_summary found at %s" % filename)
+        return data   
+    
+    def save_data(self, edge_summary):
+        """Save data to disk and set the database path.
+        
+        This override uses my.misc.pickle_dump. See the base class for doc.
+        """
+        filename = self.new_path_full
+        
+        # Save
+        try:
+            my.misc.pickle_dump(edge_summary, filename)
+        except IOError:
+            raise IOError("cannot my.misc.pickle_dump to %s" % filename)
+        
+        # Set path
+        self.set_path()
+    
+        # This should now work
+        return self.get_path
+
+    def calculate(self, force=False, **kwargs):
+        """Summarize edges
+        
+        See calculate_edge_summary_nodb for doc
+        """
+        # Actually probably should just return immediately if the result
+        # exists, and not bother recalculating. Nor should it return data
+        # in any case. That's because we probably don't want to incur the
+        # overhead of loading unless load_data is specifically called.
+        
+        # Return if force=False and we can load the data
+        if not force:
+            failed_to_read_data = False
+            try:
+                data = self.load_data()
+            except (FieldNotSetError, FileDoesNotExistError):
+                # Failed to read, probably not calculated
+                failed_to_read_data = True
+            
+            # Return data if we were able to load it
+            if not failed_to_read_data:
+                return data
+            
+            # Warn if we couldn't load data but we were supposed to be able to
+            if not self.field_is_null:
+                print (("warning: %s was set " % self._db_field_path) + 
+                    "but could not load data, recalculating" 
+                )
+        
+        # We are going to try to calculate
+        # Ensure required fields are set
+        if not self._check_if_required_fields_for_calculate_set():
+            raise RequiredFieldsNotSetError(self)
+        
+        ## Begin handler-specific stuff
+        # Get trial matrix
+        trial_matrix = BeWatch.db.get_trial_matrix(
+            self.video_session.bsession_name, True)
+
+        # Get edges
+        edge_a = self.video_session.data.all_edges.load_data()
+        
+        # Get fit
+        b2v_fit = self.video_session.fit_b2v
+        
+        # Get aspect
+        v_width = self.video_session.frame_width
+        v_height = self.video_session.frame_height
+        
+        # Calculate edge summary
+        edge_summary = calculate_edge_summary_nodb(
+            trial_matrix, edge_a, b2v_fit, 
+            v_width, v_height, **kwargs)
+        
+        ## End handler-specific stuff
+        # Store
+        self.save_data(edge_a)
 
 
 ## Functions for extracting objects from video
@@ -729,54 +821,16 @@ def plot_effect_of_crop_params(frametimes, debug_res):
     f.tight_layout()
     f2.tight_layout()
     plt.show()    
-
-
-## Edge summary dumping
-def dump_edge_summary(session, db=None, **kwargs):
-    """Calls `dump_edge_summary_nodb` on `session`"""
-    if db is None:
-        db = whiskvid.db.load_db()
     
-    # Get behavior df
-    bfile_name = db.loc[session, 'bfile']
-    if pandas.isnull(bfile_name) or not os.path.exists(bfile_name):
-        raise IOError("cannot find bfile for %s" % session)
-    trial_matrix = ArduFSM.TrialMatrix.make_trial_matrix_from_file(bfile_name)
-    if 'choice_time' not in trial_matrix:
-        trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(bfile_name)
-
-    # Get edges
-    edge_a = whiskvid.db.EdgesAll.load(db.loc[session, 'edge'])
-    b2v_fit = np.asarray(db.loc[session, ['fit_b2v0', 'fit_b2v1']])
-    v_width, v_height = my.video.get_video_aspect(db.loc[session, 'vfile'])
-    
-    # Set up edge summary filename
-    db_changed = False
-    if pandas.isnull(db.loc[session, 'edge_summary']):
-        db.loc[session, 'edge_summary'] = whiskvid.db.EdgesSummary.generate_name(
-            db.loc[session, 'session_dir'])
-        db_changed = True
-    edge_summary_filename = db.loc[session, 'edge_summary']
-    
-    # Dump edge summary
-    dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
-        edge_summary_filename=edge_summary_filename,
-        **kwargs)
-    
-    if db_changed:
-        whiskvid.db.save_db(db)
-    
-def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
-    edge_summary_filename=None,
+def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
     hist_pix_w=2, hist_pix_h=2, vid_fps=30, offset=-.5):
-    """Extract edges at choice times for each trial type and dump
+    """Extract edges at choice times for each trial type
     
     2d-histograms at choice times and saves the resulting histogram
     
     trial_matrix : must have choice time added in already
     edge_a : array of edge at every frame
     offset : time relative to choice time at which frame is dumped
-    edge_summary_filename : where to dump results, if anywhere
     
     Check if there is a bug here when the edge is in the last row and is
     not in the histogram.
@@ -837,7 +891,5 @@ def dump_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
     res = {
         'row_edges': row_edges, 'col_edges': col_edges, 
         'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}
-    if edge_summary_filename is not None:
-        my.misc.pickle_dump(res, edge_summary_filename)
     return res
 ## End edge summary dumping
