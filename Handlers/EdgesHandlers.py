@@ -842,6 +842,8 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
     # Convert choice time to frames using b2v_fit
     choice_btime = np.polyval(b2v_fit, trial_matrix['choice_time'])
     choice_btime = choice_btime + offset
+    
+    # Convert frame to int, though it will be float if it contains NaN
     trial_matrix['choice_bframe'] = np.rint(choice_btime * vid_fps)
     
     # hist2d the edges for each rewside * servo_pos
@@ -853,9 +855,9 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
         # Extract the edges at choice time from all trials of this type
         n_bad_edges = 0
         sub_edge_a = []
-        for frame in subtm['choice_bframe'].values:
+        for frame in subtm['choice_bframe'].dropna().astype(np.int).values:
             # Skip ones outside the video
-            if frame < 0 or frame >= len(edge_a) or np.isnan(frame):
+            if frame < 0 or frame >= len(edge_a):
                 continue
             
             # Count the ones for which no edge was detected
@@ -864,7 +866,7 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
                 continue
             
             else:
-                sub_edge_a.append(edge_a[int(frame)])
+                sub_edge_a.append(edge_a[frame])
 
         # Warn
         if n_bad_edges > 0:
