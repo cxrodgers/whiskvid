@@ -77,7 +77,7 @@ class AllEdgesHandler(CalculationHandler):
         
         # Save
         try:
-            np.save(edge_file, edge_a)
+            np.save(filename, edge_a)
         except IOError:
             raise IOError("cannot numpy.save to %s" % filename)
         
@@ -168,7 +168,7 @@ class AllEdgesHandler(CalculationHandler):
             
             # Warn if we couldn't load data but we were supposed to be able to
             if not self.field_is_null:
-                print (("warning: %s was set " % self._db_field_name) + 
+                print (("warning: %s was set " % self._db_field_path) + 
                     "but could not load data, recalculating" 
                 )
         
