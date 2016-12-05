@@ -63,12 +63,26 @@ class AllEdgesHandler(CalculationHandler):
     )
     
     def load_data(self):
+        """Override load_data because edges_all uses numpy.load"""
         filename = self.get_path
         try:
             data = np.load(filename)
         except IOError:
             raise IOError("no all_edges found at %s" % filename)
         return data   
+    
+    def save_data(self, edge_a):
+        """Override save_data because edges_all uses numpy.save"""
+        filename = self.new_path_full
+        
+        # Save
+        try:
+            np.save(edge_file, edge_a)
+        except IOError:
+            raise IOError("cannot numpy.save to %s" % filename)
+        
+        # Set path
+        self.set_path()
     
     def choose_manual_params(self, force=False, crop_start=100.,
         crop_stop=7000., crop_n_frames=25):
@@ -164,21 +178,32 @@ class AllEdgesHandler(CalculationHandler):
             raise RequiredFieldsNotSetError(self)
         
         ## Begin handler-specific stuff
-        # Load necessary data
-        ctac = self.video_session.data.clustered_tac.load_data()
-        cs = self.video_session.data.contacts_summary.load_data()
-        cwe = self.video_session.data.colorized_whisker_ends.load_data()
+        # Shortcut
+        vs_obj = self.video_session._django_object
+        
+        video_file = self.video_session.data.monitor_video.get_path
         
         # Calculate
-        ccs = colorize_contacts_summary_nodb(ctac, cs, cwe)
+        edge_a = get_all_edges_from_video(video_file,
+            return_frames_instead=False,
+            n_frames=np.inf,
+            lum_threshold=vs_obj.param_edge_lumthresh, 
+            roi_x=(vs_obj.param_edge_x0, vs_obj.param_edge_x1),
+            roi_y=(vs_obj.param_edge_y0, vs_obj.param_edge_y1),
+            split_iters=vs_obj.param_edge_split_iters,
+            side=vs_obj.get_param_face_side_display(),
+            crop_x0=vs_obj.param_edge_crop_x0,
+            crop_x1=vs_obj.param_edge_crop_x1,
+            crop_y0=vs_obj.param_edge_crop_y0,
+            crop_y1=vs_obj.param_edge_crop_y1,
+        )
         ## End handler-specific stuff
         
         # Store
         if save:
-            self.save_data(ccs)
+            self.save_data(edge_a)
         
-        return ccs
-
+        return edge_a
 
 class EdgeSummaryHandler(CalculationHandler):
     _db_field_path = 'edge_summary_filename'
@@ -572,62 +597,6 @@ def choose_manual_params_nodb(video_file, interactive=True,
 
     return res2
 
-def edge_frames_nodb(video_file, edge_file, 
-    lum_threshold, edge_roi_x0, edge_roi_x1, edge_roi_y0, edge_roi_y1, 
-    split_iters=13, n_frames=np.inf, 
-    stride=100, side='left', meth='largest_in_roi', debug=False, **kwargs):
-    """Edge all frames and save to edge_file. Also plot_edge_subset.
-    
-    This is a wrapper around get_all_edges_from_video_file which does the
-    actual edging. This function parses the inputs for it, and handles the
-    saving to disk and the plotting of the edge subset.
-    
-    debug : If True, then this will extract frames and edges from a subset
-        of the frames and display / return them for debugging of parameters.
-        In this case, returns frames, edge_a
-    """
-    # Get video aspect
-    width, height = my.video.get_video_aspect(video_file)
-    
-    # Form the kwargs that we will use for the call
-    kwargs = kwargs.copy()
-    kwargs['n_frames'] = n_frames
-    kwargs['lum_threshold'] = lum_threshold
-    kwargs['roi_x'] = (edge_roi_x0, edge_roi_x1)
-    kwargs['roi_y'] = (edge_roi_y0, edge_roi_y1)
-    kwargs['meth'] = 'largest_in_roi'
-    kwargs['split_iters'] = split_iters
-    kwargs['side'] = side
-    
-    # Depends on debug
-    if debug:
-        # Set parameters for debugging
-        if np.isinf(n_frames):
-            kwargs['n_frames'] = 1000
-            print "debug mode; lowering n_frames"
-        
-        # Get raw frames
-        frames = get_all_edges_from_video(video_file,
-            return_frames_instead=True, **kwargs)        
-        
-        # Get edges from those frames
-        edge_a = get_all_edges_from_video(video_file,
-            return_frames_instead=False, **kwargs)
-        
-        return frames, edge_a
-    
-    else:
-        # Get edges
-        edge_a = get_all_edges_from_video(video_file,
-            return_frames_instead=False, **kwargs)
-
-        # Save
-        np.save(edge_file, edge_a)
-
-        # Plot
-        plot_edge_subset(edge_a, stride=stride,    
-            xlim=(0, width), ylim=(height, 0))
-
 def choose_crop_params_nodb(video_file, frametimes, 
     side, edge_x0, edge_x1, edge_y0, edge_y1, lumthresh, split_iters,
     crop_params_init=None,
@@ -744,7 +713,3 @@ def plot_effect_of_crop_params(frametimes, debug_res):
     f.tight_layout()
     f2.tight_layout()
     plt.show()    
-
-## End of functions for extracting objects from video
-
-
