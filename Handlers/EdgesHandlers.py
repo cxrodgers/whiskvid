@@ -70,7 +70,8 @@ class AllEdgesHandler(CalculationHandler):
             raise IOError("no all_edges found at %s" % filename)
         return data   
     
-    def choose_manual_params(self, force=False):
+    def choose_manual_params(self, force=False, crop_start=100.,
+        crop_stop=7000., crop_n_frames=25):
         """Interactively get the necessary manual params
         
         This is a two-stage process. First we simply plot a subset of the
@@ -111,7 +112,7 @@ class AllEdgesHandler(CalculationHandler):
         
         ## Second stage
         # Get the crop manual params
-        debug_frametimes = np.linspace(100., 7000., 16)
+        debug_frametimes = np.linspace(crop_start, crop_stop, crop_n_frames)
         crop_params = choose_crop_params_nodb(
             video_file=monitor_video_filename,
             frametimes=debug_frametimes, 
@@ -124,10 +125,10 @@ class AllEdgesHandler(CalculationHandler):
         )
         
         # Set the crop manual params
-        vs_obj.param_crop_x0 = crop_params[0]
-        vs_obj.param_crop_x1 = crop_params[1]
-        vs_obj.param_crop_y0 = crop_params[2]
-        vs_obj.param_crop_y1 = crop_params[3]
+        vs_obj.param_edge_crop_x0 = crop_params[0]
+        vs_obj.param_edge_crop_x1 = crop_params[1]
+        vs_obj.param_edge_crop_y0 = crop_params[2]
+        vs_obj.param_edge_crop_y1 = crop_params[3]
         vs_obj.save()
 
     def calculate(self, force=False, save=True):
