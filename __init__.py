@@ -1,11 +1,20 @@
 """Module for dealing with whiski data.
 
+In order to be able to trace:
+    This directory, or one like it, should be on sys.path:
+    /home/chris/Downloads/whisk-1.1.0d-Linux/share/whisk/python
 
-This directory, or one like it, should be on sys.path:
-/home/chris/Downloads/whisk-1.1.0d-Linux/share/whisk/python
+    It's not ideal because that directory contains a lot of files with common
+    names (and no __init__.py), so probably put it on the end of the path.
 
-It's not ideal because that directory contains a lot of files with common
-names (and no __init__.py), so probably put it on the end of the path.
+Importing this module will automatically trigger a linkage to the
+mouse-cloud django project. This is done by:
+* Adding ~/dev/mouse-cloud to sys.path
+* Setting the environment variable DJANGO_SETTINGS_MODULE to mouse2.settings
+* Calling django.setup()
+
+It would probably be better to move the above linkage to a distinct
+module that specifically handles the behavioral and video databases.
 """
 import os
 import sys
@@ -32,8 +41,7 @@ def setup_django():
         raise ValueError("DJANGO_SETTINGS_MODULE already set to %s" % dsm_val)
     
     # Add to path
-    django_project_path = os.path.expanduser(
-        '~/Dropbox/django/mouse2')
+    django_project_path = os.path.expanduser('~/dev/mouse2')
     if django_project_path not in sys.path:
         sys.path.append(django_project_path)
 
