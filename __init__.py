@@ -15,6 +15,11 @@ mouse-cloud django project. This is done by:
 
 It would probably be better to move the above linkage to a distinct
 module that specifically handles the behavioral and video databases.
+
+The django module whisk_video is then imported, which will trigger
+a call to local_settings, which will set DATABASE_URL. So the database 
+we connect to depends on the branch currently active in the 
+django project path.
 """
 import os
 import sys
