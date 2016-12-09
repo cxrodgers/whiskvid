@@ -41,7 +41,7 @@ def setup_django():
         raise ValueError("DJANGO_SETTINGS_MODULE already set to %s" % dsm_val)
     
     # Add to path
-    django_project_path = os.path.expanduser('~/dev/mouse2')
+    django_project_path = os.path.expanduser('~/dev/mouse-cloud')
     if django_project_path not in sys.path:
         sys.path.append(django_project_path)
 
