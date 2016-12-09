@@ -1,12 +1,19 @@
 """Module for interacting with django whisker video database."""
 
 import os
+#~ import shutil
+import datetime
 import pandas
 import numpy as np
 import django
 import sys
 import whisk_video
 from Handlers import *
+import runner.models
+
+# For syncing
+import BeWatch
+
 
 # Search in the following order for the session
 root_directory_search_list = [
@@ -166,6 +173,87 @@ class VideoSession(object):
         for n, s in enumerate(whisker_color_l):
             res[n + 1] = s
         return res
+    
+    
+    ## Other methods
+    # These are things that don't make sense for a Handler
+    # Not sure how to encapsulate them exactly
+    def find_and_set_bsession(self, force=False):
+        """Find the matching behavioral session
+        
+        By convention the name should be DATESTRING_MOUSENAME. We use
+        these values to find the matching behavioral session and set
+        the field 'bsession'.
+        
+        #~ We also copy the logfile into the video session and set the
+        #~ field 'bsession_logfilename'. This is a bit redundant.
+        """
+        # Skip if it already exists
+        if not force and self._django_object.bsession is not None:
+            return
+        
+        # Try splitting into date and mouse
+        sess_split = self.name.split('_')
+        if len(sess_split) != 2:
+            raise ValueError("cannot split session name: %s" % session)
+        date_string, mouse_name = sess_split
+        
+        # Try to put the date_string to a date
+        session_date = datetime.datetime.strptime(date_string, '%y%m%d').date()
+        
+        # Try to find a matching behavioral session in the database
+        qs = runner.models.Session.objects.filter(
+            date_time_start__date=session_date,
+            mouse__name=mouse_name)
+        if qs.count() != 1:
+            raise ValueError("found 0 or 2+ matching behavioral sessions")
+        bsession = qs.first()
+        
+        # Problem is that the below code needs the BeWatch magic to
+        # set the path correctly for the current locale.
+        #~ # Copy the behavioral file into the video directory
+        #~ bfile = bsession.logfile
+        #~ bfilename = os.path.split(bfile)[1]
+        #~ new_bfile = os.path.join(self.session_path, bfilename)
+        #~ print "copying %s to %s" % (bfile, new_bfile)        
+        #~ shutil.copyfile(bfile, new_bfile)
+        
+        # Save the name of the behavioral session in the database
+        self._django_object.bsession = bsession
+        
+        # Save the name of the behavioral file
+        #~ self._django_object.bsession_logfilename = bfilename
+        
+        # Save to db
+        self._django_object.save()
+    
+    def calculate_sync(self, light_delta=30, diffsize=2, refrac=50,):
+        """Sync the behavior file with the monitor video
+        
+        Requires 'bsession' and 'monitor_video'
+        Sets 'fit_b2v0' etc.
+        """
+        # Use BeWatch to get behavior file name locale-specific
+        bdf = BeWatch.db.get_behavior_df()
+        bfile = bdf.set_index('session').loc[self.bsession_name, 'filename']
+        
+        # Monitor video
+        video_file = self.data.monitor_video.get_path
+        
+        # Sync it
+        res = BeWatch.syncing.sync_video_with_behavior(
+            bfile=bfile,
+            lums=None, 
+            video_file=video_file, 
+            light_delta=light_delta,
+            diffsize=diffsize, 
+            refrac=refrac, 
+            assumed_fps=30.,
+            error_if_no_fit=True,
+        )
+        
+        # Set sync
+        1/0
 
 class NeuralSession(object):
     """Interface to all of the data about a neural session.
