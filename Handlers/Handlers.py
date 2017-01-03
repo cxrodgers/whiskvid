@@ -3,6 +3,7 @@ import pandas
 from base import *
 from WhiskersTableHandler import WhiskersTableHandler
 from EdgesHandlers import AllEdgesHandler, EdgeSummaryHandler
+from ColorizedWhiskerEnds import ColorizedWhiskerEndsHandler
 
 class TacHandler(CalculationHandler):
     _db_field_path = 'tac_filename'
@@ -35,11 +36,6 @@ class ClusteredTacHandler(CalculationHandler):
     _db_field_path = 'clustered_tac_filename'
     _name = 'clustered_tac'
 
-class ColorizedWhiskerEndsHandler(CalculationHandler):
-    """Whisker ends after colorizing"""
-    _db_field_path = 'colorized_whisker_ends_filename'
-    _name = 'colorized_whisker_ends'
-    
 class ContactsSummaryHandler(CalculationHandler):
     """Contacts summmary"""
     _db_field_path = 'contacts_summary_filename'
