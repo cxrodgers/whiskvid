@@ -227,11 +227,14 @@ class VideoSession(object):
         # Save to db
         self._django_object.save()
     
-    def calculate_sync(self, light_delta=30, diffsize=2, refrac=50,):
+    def calculate_sync(self, light_delta=30, diffsize=2, refrac=50, 
+        verbose=False):
         """Sync the behavior file with the monitor video
         
         Requires 'bsession' and 'monitor_video'
         Sets 'fit_b2v0' etc.
+        
+        verbose : print out frame number for every chunk as it is processed
         """
         # Use BeWatch to get behavior file name locale-specific
         bdf = BeWatch.db.get_behavior_df()
@@ -250,6 +253,7 @@ class VideoSession(object):
             refrac=refrac, 
             assumed_fps=30.,
             error_if_no_fit=True,
+            verbose=verbose
         )
         
         # Set sync
