@@ -327,3 +327,46 @@ class NeuralSession(object):
             self._field_fit_n2b0,
             self._field_fit_n2b1,
         ])
+
+class NeuralPathJoiner(object):
+    def __init__(self, neural_session, root_directory=None):
+        # Figure out which root directory we're using
+        if root_directory is None:
+            # Try each root directory in turn
+            for try_root_dir in neural_root_directory_search_list:
+                self._root_directory = try_root_dir
+                self._session_directory = os.path.join(self._root_directory,
+                    neural_session._field_name)
+                
+                if os.path.exists(self._session_directory):
+                    break
+        else:
+            # Use the requested root directory
+            self._root_directory = try_root_dir
+            self._session_directory = os.path.join(self._root_directory,
+                neural_session._field_name)            
+        
+        # Ensure we found the session
+        if not os.path.exists(self._session_directory):
+            raise IOError("cannot find session directory at %s" %
+                self._session_directory)
+        
+        self._neural_session = neural_session
+        self._neural_session_name = neural_session.name
+    
+    @property
+    def session(self):
+        return self._session_directory
+    
+    @property
+    def sort(self):
+        return os.path.join(self._session_directory, 
+            self._neural_session.sort_name)
+    
+    @property
+    def kwik(self):
+        return os.path.join(self.sort, self._neural_session._field_kwik_filename)
+
+    @property
+    def kwx(self):
+        return os.path.join(self.sort, self._neural_session._field_kwx_filename)
