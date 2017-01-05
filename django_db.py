@@ -13,7 +13,7 @@ import runner.models
 
 # For syncing
 import BeWatch
-
+import my.misc
 
 # Search in the following order for the session
 root_directory_search_list = [
@@ -228,7 +228,7 @@ class VideoSession(object):
         self._django_object.save()
     
     def calculate_sync(self, light_delta=30, diffsize=2, refrac=50, 
-        verbose=False):
+        verbose=False, force=False):
         """Sync the behavior file with the monitor video
         
         Requires 'bsession' and 'monitor_video'
@@ -236,6 +236,16 @@ class VideoSession(object):
         
         verbose : print out frame number for every chunk as it is processed
         """
+        # Skip if it already exists
+        already_done = (
+            (self._django_object.fit_v2b0 is not None) and
+            (self._django_object.fit_b2v1 is not None) and
+            (self._django_object.fit_v2b0 is not None) and
+            (self._django_object.fit_v2b1 is not None)
+        )
+        if not force and already_done:
+            return
+
         # Use BeWatch to get behavior file name locale-specific
         bdf = BeWatch.db.get_behavior_df()
         bfile = bdf.set_index('session').loc[self.bsession_name, 'filename']
@@ -257,7 +267,15 @@ class VideoSession(object):
         )
         
         # Set sync
-        1/0
+        self._django_object.fit_b2v0 = res[0]
+        self._django_object.fit_b2v1 = res[1]
+
+        fit_v2b = my.misc.invert_linear_poly(res)
+        self._django_object.fit_v2b0 = fit_v2b[0]
+        self._django_object.fit_v2b1 = fit_v2b[1]
+    
+        # Save to db
+        self._django_object.save()
 
 class NeuralSession(object):
     """Interface to all of the data about a neural session.
