@@ -126,9 +126,11 @@ class AllEdgesHandler(CalculationHandler):
         )
         
         # Set them in the database
-        side2int = dict([(v, k) 
-            for k, v in vs_obj.param_face_choices])
-        vs_obj.param_face_side = side2int[manual_params['side']]
+        side2int = dict([(v, k) for k, v in vs_obj.param_face_choices])
+        try:
+            vs_obj.param_face_side = side2int[manual_params['side']]
+        except KeyError:
+            print "warning: invalid face side, leaving unchanged"
         vs_obj.param_edge_lumthresh = manual_params['edge_lumthresh']
         vs_obj.param_edge_x0 = manual_params['edge_roi_x0']        
         vs_obj.param_edge_x1 = manual_params['edge_roi_x1']        
