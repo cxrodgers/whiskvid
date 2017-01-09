@@ -637,36 +637,7 @@ def make_overlay_image_nodb(trialnum2frame=None,
 
 
 ## edge_summary + tac
-def get_tac(session, min_t=None, max_t=None):
-    """Wrapper to load tac, add behavioral information and trial times
-    
-    min_t, max_t : if not None, then drops rows that are not in this time
-        range relative to the choice time on each trial
-    """
-    db = whiskvid.db.load_db()
-
-    # Load stuff
-    res = whiskvid.db.load_everything_from_session(session, db)
-    tac = res['tac']
-    trial_matrix = res['trial_matrix']
-    v2b_fit = res['v2b_fit']
-
-    # Get trial timings
-    bfile = db.loc[session, 'bfile']
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(bfile)
-
-    # Add trials
-    tac = whiskvid.db.add_trials_to_tac(tac, v2b_fit, trial_matrix, 
-        drop_late_contacts=False)
-    
-    if min_t is not None:
-        tac = tac[tac.t_wrt_choice >= min_t]
-    if max_t is not None:
-        tac = tac[tac.t_wrt_choice < max_t]
-    
-    return tac
-
-def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
+def plot_tac(video_session, ax=None, versus='rewside', min_t=-2.0, max_t=None,
     **plot_kwargs):
     """Plot the contact locations based on which trial type or response.
     
@@ -675,9 +646,14 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
     
     t_min and t_max are passed to tac
     """
-    db = whiskvid.db.load_db()
-    tac = get_tac(session, min_t=min_t, max_t=max_t)
+    # Get the tac filtered by time
+    tac = video_session.data.tac.load_data(min_t=min_t, max_t=max_t)
     
+    # Get the video size to set the plot limits
+    xlims = (0, video_session.frame_width)
+    ylims = (video_session.frame_height, 0)
+    
+    # Plot defaults
     if 'marker' not in plot_kwargs:
         plot_kwargs['marker'] = 'o'
     if 'mec' not in plot_kwargs:
@@ -685,9 +661,11 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
     if 'ls' not in plot_kwargs:
         plot_kwargs['ls'] = 'none'
 
+    # Figure handles
     if ax is None:
         f, ax = plt.subplots()
     
+    # Two types of plots
     if versus == 'rewside':
         # Plot tac vs rewside
         rewside2color = {'left': 'b', 'right': 'r'}
@@ -696,9 +674,7 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         for rewside, subtac in gobj:
             ax.plot(subtac['tip_x'], subtac['tip_y'],
                 color=rewside2color[rewside], **plot_kwargs)
-            ax.set_xlim((0, db.loc[session, 'v_width']))
-            ax.set_ylim((db.loc[session, 'v_height'], 0))
-        my.plot.rescue_tick(ax=ax, x=4, y=4)
+    
     elif versus == 'choice':
         # Plot tac vs choice
         choice2color = {'left': 'b', 'right': 'r'}
@@ -707,16 +683,20 @@ def plot_tac(session, ax=None, versus='rewside', min_t=None, max_t=None,
         for rewside, subtac in gobj:
             ax.plot(subtac['tip_x'], subtac['tip_y'],
                 color=rewside2color[rewside], **plot_kwargs)
-            ax.set_xlim((0, db.loc[session, 'v_width']))
-            ax.set_ylim((db.loc[session, 'v_height'], 0))
-        my.plot.rescue_tick(ax=ax, x=4, y=4)
+    
     else:
         raise ValueError("bad versus: %s" % versus)
+
+    # pretty
+    ax.set_xlim(xlims)
+    ax.set_ylim(ylims)
+    ax.axis('equal')
+    my.plot.rescue_tick(ax=ax, x=4, y=4)
     plt.show()
     
     return ax
 
-def plot_edge_summary(session, ax=None, **kwargs):
+def plot_edge_summary(video_session, ax=None, **kwargs):
     """Plot the 2d histogram of edge locations
     
     kwargs are passed to imshow, eg clim or alpha
@@ -725,30 +705,26 @@ def plot_edge_summary(session, ax=None, **kwargs):
     
     Returns: typical_edges_hist2d, typical_edges_row, typical_edges_col
     """
-    db = whiskvid.db.load_db()
-    
-    # Load overlay image and edge_a
-    everything = whiskvid.db.load_everything_from_session(session, db)
+    # Load the edge summary
+    edge_summary = video_session.data.edge_summary.load_data()
 
-    # Get behavior times
-    trial_matrix = everything['trial_matrix']
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
-        db.loc[session, 'bfile'])
+    # Get the video size to set the plot limits
+    xlims = (0, video_session.frame_width)
+    ylims = (0, video_session.frame_height)
 
     # Get hists
-    typical_edges_hist2d = np.sum(everything['edge_summary']['H_l'], axis=0)
-    typical_edges_row = everything['edge_summary']['row_edges']
-    typical_edges_col = everything['edge_summary']['col_edges']
+    typical_edges_hist2d = np.sum(edge_summary['H_l'], axis=0)
+    typical_edges_row = edge_summary['row_edges']
+    typical_edges_col = edge_summary['col_edges']
 
-    # Plot H_l
+    # Figure handles
     if ax is None:
         f, ax = plt.subplots()
+
+    # Plot H_l
     im = my.plot.imshow(typical_edges_hist2d, ax=ax,
-        xd_range=(0, db.loc[session, 'v_width']),
-        yd_range=(0, db.loc[session, 'v_height']),
+        xd_range=xlims, yd_range=ylims,
         axis_call='image', cmap=plt.cm.gray_r, **kwargs)
-    #~ f.savefig(os.path.join(row['root_dir'], session, 
-        #~ session + '.edges.overlays.png'))
     
     return typical_edges_hist2d, typical_edges_row, typical_edges_col
 
