@@ -282,6 +282,7 @@ class EdgeSummaryHandler(CalculationHandler):
         if not force:
             # Check if data available
             data_available = True
+            warn_about_field = False
             try:
                 self.get_path
             except FieldNotSetError:
