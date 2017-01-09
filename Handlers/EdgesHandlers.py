@@ -329,7 +329,7 @@ class EdgeSummaryHandler(CalculationHandler):
         
         ## End handler-specific stuff
         # Store
-        self.save_data(edge_a)
+        self.save_data(edge_summary)
 
 
 ## Functions for extracting objects from video
