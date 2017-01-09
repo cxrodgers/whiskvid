@@ -7,6 +7,46 @@ class ContactsSummaryHandler(CalculationHandler):
     """Contacts summmary"""
     _db_field_path = 'contacts_summary_filename'
     _name = 'contacts_summary'
+    
+    def calculate(self, force=False, verbose=True, **kwargs):
+        """Wrapper around summarize_contacts_nodb"""
+        # Return if force=False and the data exists
+        if not force:
+            # Check if data available
+            data_available = True
+            warn_about_field = False
+            try:
+                self.get_path
+            except FieldNotSetError:
+                # not calculated yet
+                data_available = False
+            except FileDoesNotExistError:
+                data_available = False
+                warn_about_field = True
+            
+            # Return if it is
+            if data_available:
+                return
+            
+            # Warn if we couldn't load data but we were supposed to be able to
+            if warn_about_field:
+                print (("warning: %s was set " % self._db_field_path) + 
+                    "but could not load data, recalculating" 
+                )
+        
+        # We are going to try to calculate
+        # Ensure required fields are set
+        if not self._check_if_required_fields_for_calculate_set():
+            raise RequiredFieldsNotSetError(self)
+
+        # Load required data
+        tac_clustered = self.video_session.data.clustered_tac.load_data()
+        
+        # Calculate
+        contacts_summary = summarize_contacts_nodb(tac_clustered)
+
+        # Store
+        self.save_data(contacts_summary)
 
 class ColorizedContactsSummaryHandler(CalculationHandler):
     """Colorized contacts summmary"""
@@ -23,20 +63,25 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         """
         # Return if force=False and we can load the data
         if not force:
-            failed_to_read_data = False
+            # Check if data available
+            data_available = True
+            warn_about_field = False
             try:
-                data = self.load_data()
-            except (FieldNotSetError, FileDoesNotExistError):
-                # Failed to read, probably not calculated
-                failed_to_read_data = True
+                self.get_path
+            except FieldNotSetError:
+                # not calculated yet
+                data_available = False
+            except FileDoesNotExistError:
+                data_available = False
+                warn_about_field = True
             
-            # Return data if we were able to load it
-            if not failed_to_read_data:
-                return data
+            # Return if it is
+            if data_available:
+                return
             
             # Warn if we couldn't load data but we were supposed to be able to
-            if not self.field_is_null:
-                print (("warning: %s was set " % self._db_field_name) + 
+            if warn_about_field:
+                print (("warning: %s was set " % self._db_field_path) + 
                     "but could not load data, recalculating" 
                 )
         
@@ -110,38 +155,6 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     cs['color'] = chosen_colors['cg']     
     
     return cs
-
-
-def summarize_contacts(vsession):
-    """Summarize the contacts using the database and save to disk
-    
-    If a file called "contacts_summary" already exists in the session 
-    directory, it is loaded and returned immediately.
-    
-    Otherwise, the clustered_tac is loaded, and summarize_contacts_nodb()
-    is called. Then the contacts_summary is saved to disk and returned.
-    """    
-    # Determine the filename
-    db = whiskvid.db.load_db()
-    contacts_summary_name = os.path.join(db.loc[vsession, 'session_dir'],
-        'contacts_summary')
-
-    # Return if already exists
-    if os.path.exists(contacts_summary_name):
-        print "loading cached contacts summary"
-        contacts_summary = pandas.read_pickle(contacts_summary_name)
-        return contacts_summary
-
-    # Otherwise compute
-    tac_clustered_name = os.path.join(db.loc[vsession, 'session_dir'],
-        'clustered_tac')
-    tac_clustered = pandas.read_pickle(tac_clustered_name)
-    contacts_summary = summarize_contacts_nodb(tac_clustered)
-
-    # Store
-    contacts_summary.to_pickle(contacts_summary_name)
-    
-    return contacts_summary
 
 def summarize_contacts_nodb(tac_clustered):
     """Summarize the timing and location of clustered_tac
