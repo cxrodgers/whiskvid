@@ -2082,7 +2082,7 @@ def logreg_perf_vs_contacts(session):
 ## for classifying whiskers
 def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150,
-    subsample_frame=1):
+    subsample_frame=1, rank_foly_ascending=True):
     """Classify the whiskers by their position on the face
     
     First we apply two length thresholds (one for posterior and one
@@ -2125,7 +2125,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     
     # No need to add 1 because rank starts with 1
     mwe['ordinal'] = mwe.groupby('frame')['fol_y'].apply(
-        lambda ser: ser.rank(method='first'))
+        lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
 
     # Anything beyond C4 is not real
     mwe.loc[mwe['ordinal'] > max_whiskers, 'ordinal'] = 0
