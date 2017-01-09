@@ -52,7 +52,7 @@ class VideoSession(object):
         for handler_class in [TacHandler, AllEdgesHandler, EdgeSummaryHandler,
             MonitorVideoHandler, ClusteredTacHandler, 
             ColorizedWhiskerEndsHandler,
-            ContactsSummaryHandler, MaskedWhiskerEndsHandler, 
+            ContactsSummaryHandler, #MaskedWhiskerEndsHandler, 
             VideoColorizedWhiskersHandler, VideoTrackedWhiskersHandler,
             WhiskersTableHandler, ColorizedContactsSummaryHandler]:
             # Init the handler

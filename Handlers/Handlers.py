@@ -48,7 +48,11 @@ class CalculationHandlerWithoutDb(CalculationHandler):
             "set_path not available because this calculation is not in the db")
 
 class MaskedWhiskerEndsHandler(CalculationHandlerWithoutDb):
-    """Whisker ends after follicle mask"""
+    """Whisker ends after follicle mask
+    
+    I don't think this is necessary anymore. WhiskersTableHandler loads
+    and masks.
+    """
     _name = 'masked_whisker_ends'
     
     # Override because it's not just _name
