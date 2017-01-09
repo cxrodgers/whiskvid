@@ -65,8 +65,12 @@ class CalculationHandler(object):
     def get_path(self):
         """Full path to file using session directory and database field
         
-        Raises ValueError if the field is not set
-        Raises IOError if the field is set but the file does not exist
+        This is the recommended way to check if the data is "available"
+        without actually loading it.
+        
+        Raises FieldNotSetError if the field is not set
+        Raises FileDoesNotExistError if the field is set but the file 
+            does not exist
         
         Returns: full path to file
         """

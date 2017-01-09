@@ -159,34 +159,40 @@ class AllEdgesHandler(CalculationHandler):
         vs_obj.param_edge_crop_y1 = crop_params[3]
         vs_obj.save()
 
-    def calculate(self, force=False, save=True):
+    def calculate(self, force=False):
         """Calculate edges using calculate_all_edges_nodb
         
         See calculate_all_edges_nodb for algorithm. This loads
         data from disk and stores result.
         
-        Returns : all_edges
-        """
-        # Actually probably should just return immediately if the result
-        # exists, and not bother recalculating. Nor should it return data
-        # in any case. That's because we probably don't want to incur the
-        # overhead of loading unless load_data is specifically called.
+        force : if False and the data exists on disk, returns immediately
+            If the data does exist (checked by calling get_path and
+            seeing if exception results) then this function returns
+            immediately.
         
-        # Return if force=False and we can load the data
+        Returns : nothing
+            We avoid the overhead of loading from disk unless load_data
+            is specifically called
+        """
+        # Return if force=False and the data exists
         if not force:
-            failed_to_read_data = False
+            # Check if data available
+            data_available = True
             try:
-                data = self.load_data()
-            except (FieldNotSetError, FileDoesNotExistError):
-                # Failed to read, probably not calculated
-                failed_to_read_data = True
+                self.get_path
+            except FieldNotSetError:
+                # not calculated yet
+                data_available = False
+            except FileDoesNotExistError:
+                data_available = False
+                warn_about_field = True
             
-            # Return data if we were able to load it
-            if not failed_to_read_data:
-                return data
+            # Return if it is
+            if data_available:
+                return
             
             # Warn if we couldn't load data but we were supposed to be able to
-            if not self.field_is_null:
+            if warn_about_field:
                 print (("warning: %s was set " % self._db_field_path) + 
                     "but could not load data, recalculating" 
                 )
@@ -219,10 +225,7 @@ class AllEdgesHandler(CalculationHandler):
         ## End handler-specific stuff
         
         # Store
-        if save:
-            self.save_data(edge_a)
-        
-        return edge_a
+        self.save_data(edge_a)
 
 class EdgeSummaryHandler(CalculationHandler):
     _db_field_path = 'edge_summary_filename'
@@ -265,27 +268,35 @@ class EdgeSummaryHandler(CalculationHandler):
         """Summarize edges
         
         See calculate_edge_summary_nodb for doc
-        """
-        # Actually probably should just return immediately if the result
-        # exists, and not bother recalculating. Nor should it return data
-        # in any case. That's because we probably don't want to incur the
-        # overhead of loading unless load_data is specifically called.
         
-        # Return if force=False and we can load the data
+        force : if False and the data exists on disk, returns immediately
+            If the data does exist (checked by calling get_path and
+            seeing if exception results) then this function returns
+            immediately.
+        
+        Returns : nothing
+            We avoid the overhead of loading from disk unless load_data
+            is specifically called
+        """
+        # Return if force=False and the data exists
         if not force:
-            failed_to_read_data = False
+            # Check if data available
+            data_available = True
             try:
-                data = self.load_data()
-            except (FieldNotSetError, FileDoesNotExistError):
-                # Failed to read, probably not calculated
-                failed_to_read_data = True
+                self.get_path
+            except FieldNotSetError:
+                # not calculated yet
+                data_available = False
+            except FileDoesNotExistError:
+                data_available = False
+                warn_about_field = True
             
-            # Return data if we were able to load it
-            if not failed_to_read_data:
-                return data
+            # Return if it is
+            if data_available:
+                return
             
             # Warn if we couldn't load data but we were supposed to be able to
-            if not self.field_is_null:
+            if warn_about_field:
                 print (("warning: %s was set " % self._db_field_path) + 
                     "but could not load data, recalculating" 
                 )
