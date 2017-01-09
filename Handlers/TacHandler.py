@@ -3,6 +3,7 @@ from base import *
 import numpy as np
 import pandas
 import my
+import BeWatch
 
 class TacHandler(CalculationHandler):
     _db_field_path = 'tac_filename'
@@ -80,6 +81,85 @@ class TacHandler(CalculationHandler):
         vs_obj.param_fol_y0 = res['y0']
         vs_obj.param_fol_y1 = res['y1']
         vs_obj.save()
+
+    def load_data(self, add_btime=False, add_trial_info=False, 
+        min_t=None, max_t=None):
+        """Load tac data and optionally process a bit
+        
+        add_btime : if True, loads sync and convert 'frame' to 'btime'
+        
+        add_trial_info : if True, associates each tac with a trial, and
+            adds information about that trial. We associate based on
+            the 'start_time' column of trial_matrix. 
+            
+            These columns are added: ['rwin_time', 'trial', 'rewside', 
+                'outcome', 'choice_time', 'isrnd', 'choice', 'relative_t']
+            
+            'relative_t' is the time wrt the rwin_time for that trial,
+            though this could easily be edited to be wrt choice_time.
+            
+            This implies add_btime = True
+        
+        min_t, max_t : discard tac rows with a 'relative_t' outside of
+            this range. If both are None, nothing happens. If one is None,
+            assumes the other is 0.
+            
+            This implies both add_btime and add_trial_info are True.
+        """
+        # Parent class to load the raw data
+        tac = super(TacHandler, self).load_data()
+        
+        # Need btime if we want to add trials
+        if add_trial_info or min_t is not None or max_t is not None:
+            add_btime = True
+        
+        # Need trial info if we want to filter
+        if min_t is not None or max_t is not None:
+            add_trial_info = True
+        
+        # Optionally add btime
+        if add_btime:
+            # Get sync
+            v2b_fit = self.video_session.fit_v2b
+
+            # "vtime" is in the spurious 30fps timebase
+            # the fits take this into account
+            tac['vtime'] = tac['frame'] / 30.
+            tac['btime'] = np.polyval(v2b_fit, tac['vtime'].values)
+        
+        # Optionally add trial labels
+        if add_trial_info:
+            # Get trial matrix
+            bsession = self.video_session.bsession_name
+            trial_matrix = BeWatch.db.get_trial_matrix(bsession, True)
+
+            # Associate each trial with a tac
+            tac['trial'] = trial_matrix.index[
+                np.searchsorted(trial_matrix['start_time'].values, 
+                    tac['btime'].values) - 1]    
+
+            # Add rewside and outcome to tac
+            tac = tac.join(trial_matrix[[
+                'rewside', 'outcome', 'choice_time', 'isrnd', 'choice',
+                'rwin_time',]], 
+                on='trial')
+            tac['relative_t'] = tac['btime'] - tac['rwin_time']
+    
+        # Optionally filter in a window around each trial
+        if min_t is not None or max_t is not None:
+            # Defaults
+            if min_t is None:
+                min_t = 0
+            if max_t is None:
+                max_t = 0
+            
+            # Filter
+            tac = tac[
+                (tac['relative_t'] > min_t) &
+                (tac['relative_t'] <= max_t)
+            ].copy()
+        
+        return tac
 
 def calculate_contacts(mwe, edge_a, contact_dist_thresh=10, verbose=True):
     """Calculate whisker-shape contacts by proximity
