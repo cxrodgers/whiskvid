@@ -200,3 +200,118 @@ def calculate_contacts(mwe, edge_a, contact_dist_thresh=10, verbose=True):
     tips_and_contacts = tips_and_contacts[
         tips_and_contacts.closest_dist < contact_dist_thresh]
     return tips_and_contacts
+
+
+## For clustering contacts
+class ClusteredTacHandler(CalculationHandler):
+    """Clustering proximity events into contacts"""
+    _db_field_path = 'clustered_tac_filename'
+    _name = 'clustered_tac'
+
+    # The fields that are required before calculate can run
+    _required_fields_for_calculate = (
+        'tac_filename',
+    )
+
+    def calculate(self, force=False, verbose=True, **kwargs):
+        """Wrapper around cluster_contacts_nodb"""
+        # Return if force=False and the data exists
+        if not force:
+            # Check if data available
+            data_available = True
+            warn_about_field = False
+            try:
+                self.get_path
+            except FieldNotSetError:
+                # not calculated yet
+                data_available = False
+            except FileDoesNotExistError:
+                data_available = False
+                warn_about_field = True
+            
+            # Return if it is
+            if data_available:
+                return
+            
+            # Warn if we couldn't load data but we were supposed to be able to
+            if warn_about_field:
+                print (("warning: %s was set " % self._db_field_path) + 
+                    "but could not load data, recalculating" 
+                )
+        
+        # We are going to try to calculate
+        # Ensure required fields are set
+        if not self._check_if_required_fields_for_calculate_set():
+            raise RequiredFieldsNotSetError(self)
+
+        # Load required data
+        tac = self.video_session.data.tac.load_data()
+        
+        # Cluster it
+        tac_clustered = cluster_contacts_nodb(tac, **kwargs)
+
+        # Save it
+        self.save_data(tac_clustered)
+
+def label_greedy(tac, n_contig=15, x_contig=5):
+    """Group together contact times within a certain window of each other.
+    
+    Begin with the first tac. Group it with all future tacs that are separated
+    by no more than n_contig frames and x_contig pixels. Continue.
+    
+    Returns: a new tac2, with a column "group".
+    """
+    # Initialize the groups
+    tac2 = tac.copy().sort_values(by='frame')
+    tac2['group'] = 0
+    n_groups = 0
+    
+    # Iterate over tacs
+    for idx in tac2.index:
+        # Get group of this row, if any
+        mygroup = tac2.loc[idx, 'group']
+        if mygroup == 0:
+            # Make a new group
+            n_groups = n_groups + 1
+            tac2.loc[idx, 'group'] = n_groups
+            mygroup = n_groups
+        
+        # Find all points with temporal window
+        dist = (
+            np.abs(tac2.tip_x - tac2.loc[idx, 'tip_x']) + 
+            np.abs(tac2.tip_y - tac2.loc[idx, 'tip_y']))
+        neighbors = (
+            (tac2.group == 0) &
+            (tac2.frame < tac2.loc[idx, 'frame'] + n_contig) &
+            (dist < x_contig)
+            )
+        tac2.loc[neighbors, 'group'] = mygroup
+    
+    return tac2
+
+def cluster_contacts_nodb(tac, max_contacts_per_frame=50, n_contig=3,
+    x_contig=100):
+    """Cluster contacts by frame into discrete contact events.
+    
+    max_contacts_per_frame : drop frames with more contacts than this
+        Typically these are artefacts on black frames
+    n_contig, x_contig : passed to label_greedy
+    
+    Returns: tac_clustered
+    """
+    # Group by frame
+    tac_gframe = tac.groupby('frame')
+
+    # Get rid of the messed up frames with >50 contacts
+    n_contacts_per_frame = tac_gframe.apply(len)
+    bad_frames = n_contacts_per_frame.index[
+        n_contacts_per_frame > max_contacts_per_frame]
+    print "dropping %d bad frames" % len(bad_frames)
+    tac = tac[~tac.frame.isin(bad_frames)]
+    tac_gframe = tac.groupby('frame')
+
+    # Cluster them
+    print "clustering"
+    tac_clustered = label_greedy(tac, n_contig=n_contig, x_contig=x_contig)
+    
+    return tac_clustered
