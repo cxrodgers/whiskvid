@@ -400,7 +400,7 @@ def plot_stills_with_overlays_from_data(
         n_colors = 7
         contact_colors = my.plot.generate_colorbar(n_colors)
 
-    f, axa = my.plot.auto_subplot(len(frame_triggers))
+    f, axa = my.plot.auto_subplot(len(frame_triggers), figsize=(15, 10))
     for frame_trigger, ax in zip(frame_triggers, axa.flatten()):
         # Load the frame
         frame, stdout, stderr = my.video.get_frame(monitor_video_filename, 
@@ -453,3 +453,8 @@ def plot_stills_with_overlays_from_data(
     # Clean up
     if whiskers_file_handle is not None:
         whiskers_file_handle.close()
+
+    for ax in axa.flatten():
+        ax.set_xticks([])
+        ax.set_yticks([])
+    f.tight_layout()
