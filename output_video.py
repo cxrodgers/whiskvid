@@ -376,3 +376,80 @@ def write_video_with_overlays_from_data(output_filename,
         input_reader.close()
     writer.close()
     plt.close(f)    
+
+
+def plot_stills_with_overlays_from_data(
+    monitor_video_filename,
+    frame_triggers=None,
+    input_video_alpha=1,
+    whiskers_table=None, whiskers_file_handle=None,
+    edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
+    contacts_table=None, post_contact_linger=50,
+    contact_colors=None,
+    ):
+    """Clone of write_video_with_overlays_from_data for still images.
+    
+    """
+    # Parse the arguments
+    frame_triggers = np.asarray(frame_triggers)
+    announced_frame_trigger = 0
+    input_width, input_height = my.video.get_video_aspect(
+        monitor_video_filename)
+
+    if contact_colors is None:
+        n_colors = 7
+        contact_colors = my.plot.generate_colorbar(n_colors)
+
+    f, axa = my.plot.auto_subplot(len(frame_triggers))
+    for frame_trigger, ax in zip(frame_triggers, axa.flatten()):
+        # Load the frame
+        frame, stdout, stderr = my.video.get_frame(monitor_video_filename, 
+            frame_number=frame_trigger)
+        
+        # Plot typical edge images as static alpha
+        if typical_edges_hist2d is not None:
+            im1 = my.plot.imshow(typical_edges_hist2d, ax=ax, axis_call='image',
+                extent=(0, input_width, input_height, 0), cmap=plt.cm.gray)
+            im1.set_alpha(edge_alpha)
+        
+        # Plot input video frames
+        in_image = np.zeros((input_height, input_width))
+        im2 = my.plot.imshow(in_image, ax=ax, 
+            axis_call='image', cmap=plt.cm.gray, extent=(0, input_width, input_height, 0))
+        im2.set_alpha(input_video_alpha)
+        im2.set_clim((0, 255))
+
+        # Plot contact positions dynamically
+        if contacts_table is not None:
+            contact_positions_l = []
+            for color in contact_colors:
+                contact_positions_l.append(
+                    ax.plot([np.nan], [np.nan], '.', ms=15, color=color)[0])
+            #~ contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
+        else:
+            contact_positions_l = None
+
+        # Dynamic edge
+        if edge_a is not None:
+            edge_a_obj, = ax.plot([np.nan], [np.nan], '-', color='pink', lw=3)
+        else:
+            edge_a_obj = None
+
+        # Update the frame
+        whisker_handles = frame_update(ax=ax, 
+            nframe=frame_trigger, 
+            frame=frame,
+            whisker_handles=[], 
+            contacts_table=contacts_table,
+            post_contact_linger=post_contact_linger, 
+            whiskers_table=whiskers_table, 
+            whiskers_file_handle=whiskers_file_handle, 
+            edge_a=edge_a,
+            im2=im2, 
+            edge_a_obj=edge_a_obj, 
+            contact_positions_l=contact_positions_l,
+            d_spatial=1, d_temporal=1, contact_colors=contact_colors)
+
+    # Clean up
+    if whiskers_file_handle is not None:
+        whiskers_file_handle.close()
