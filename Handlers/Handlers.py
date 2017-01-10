@@ -150,10 +150,10 @@ class VideoColorizedWhiskersHandler(CalculationHandlerWithoutDb):
         # choose by trial number
         frame_triggers = tm['choice_frame'].dropna()
         frame_triggers = frame_triggers[frame_triggers > 1000]
-        frame_triggers = frame_triggers.values[:3]
+        frame_triggers = frame_triggers.values[::5]
 
         def get_extra_text(frame_number):
-            trial_idx = np.searchsorted(tm.choice_frame + 340, [frame_number])[0]
+            trial_idx = np.searchsorted(tm.choice_frame + 400, [frame_number])[0]
             return '%d-%d-%s-%0.3f' % (
                 tm.loc[trial_idx, 'servo_pos'],
                 tm.loc[trial_idx, 'stepper_pos'],
