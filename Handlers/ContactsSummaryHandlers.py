@@ -114,10 +114,17 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     """
     # Copy so we can assign a new column
     cs = cs.copy()
+    ctac = ctac.copy()
     
     # Assign the color from cwe to clustered_tac
     # ctac shares an index with cwe
     ctac['color'] = cwe.loc[ctac.index, 'color_group']
+
+    # in debugging, cwe may be truncated
+    # so only select the tacs for which we have entries in cwe
+    if ctac.color.isnull().any():
+        print "warning: dropping nan in ctac before colorizing cs"
+        ctac = ctac.dropna()
 
     # Group the ctac by 'group' (index into cs)
     # Choose the most common color within that gruop
@@ -153,6 +160,11 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     
     # Use the fac that ctac.group is the index of cs
     cs['color'] = chosen_colors['cg']     
+    
+    # again may need to dropna() during debugging
+    if cs.color.isnull().any():
+        print "warning: dropping nan in colorized contacts summary"
+        cs = cs.dropna()
     
     return cs
 
