@@ -910,8 +910,14 @@ def logreg_perf_vs_contacts(session):
 ## for classifying whiskers
 def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150,
-    subsample_frame=1, rank_foly_ascending=True):
+    subsample_frame=1, rank_foly_ascending=True,
+    oof_y_thresh=5, oof_y_bonus=200):
     """Classify the whiskers by their position on the face
+    
+    oof_y_thresh : whiskers with a tip_y greater than this will have
+        oof_y_bonus added to their length
+    rank_foly_ascending : if True, the lowest color is given to the
+        larget fol_y (nearest top of frame)
     
     First we apply two length thresholds (one for posterior and one
     for anterior). Then we rank the remaining whisker objects in each
@@ -937,31 +943,41 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
         ax.plot(submwe.angle.values, submwe.fol_y.values, ',')    
     """
-    orig_mwe = mwe.copy()
+    print "copying data"
+    # Make changes to the copy to avoid SettingWithCopyWarning
+    mwe_copy = mwe.copy()
+
+    # Out of frame bonus
+    mwe_copy.loc[mwe_copy.tip_y < oof_y_thresh, 'pixlen'] += oof_y_bonus
 
     # Apply various thresholds
-    mwe = mwe[
-        ((mwe.pixlen >= long_pixlen_thresh) & (mwe.fol_y < fol_y_cutoff)) | 
-        ((mwe.pixlen >= short_pixlen_thresh) & (mwe.fol_y >= fol_y_cutoff))
-    ]
+    # Make a second copy here
+    mwe_copy2 = mwe_copy[
+        ((mwe_copy.pixlen >= long_pixlen_thresh) & 
+            (mwe_copy.fol_y < fol_y_cutoff)) | 
+        ((mwe_copy.pixlen >= short_pixlen_thresh) & 
+            (mwe_copy.fol_y >= fol_y_cutoff))
+    ].copy()
 
     # Subsample to save time
-    mwe = mwe[mwe.frame.mod(subsample_frame) == 0]
+    mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
 
     # Argsort each frame
     print "sorting whiskers in order"
     
     # No need to add 1 because rank starts with 1
-    mwe['ordinal'] = mwe.groupby('frame')['fol_y'].apply(
+    mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(
         lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
 
     # Anything beyond C4 is not real
-    mwe.loc[mwe['ordinal'] > max_whiskers, 'ordinal'] = 0
+    mwe_copy2.loc[mwe_copy2['ordinal'] > max_whiskers, 'ordinal'] = 0
 
-    orig_mwe['color_group'] = 0
-    orig_mwe.loc[mwe.index, 'color_group'] = mwe['ordinal'].astype(np.int)
+    # Store the results in the first copy
+    mwe_copy['color_group'] = 0
+    mwe_copy.loc[mwe_copy2.index, 'color_group'] = \
+        mwe_copy2['ordinal'].astype(np.int)
     
-    return orig_mwe
+    return mwe_copy
 
 ##
 
