@@ -246,7 +246,7 @@ def write_video_with_overlays_from_data(output_filename,
     import WhiskiWrap
 
     # Parse the arguments
-    frame_triggers = np.asarray(frame_triggers)
+    frame_triggers = np.asarray(frame_triggers).astype(np.int)
     announced_frame_trigger = 0
     input_width = int(input_width)
     input_height = int(input_height)
@@ -391,7 +391,7 @@ def plot_stills_with_overlays_from_data(
     
     """
     # Parse the arguments
-    frame_triggers = np.asarray(frame_triggers)
+    frame_triggers = np.asarray(frame_triggers).astype(np.int)
     announced_frame_trigger = 0
     input_width, input_height = my.video.get_video_aspect(
         monitor_video_filename)
