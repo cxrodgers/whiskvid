@@ -36,6 +36,12 @@ try:
 except ImportError:
     pass
 
+# whisker colors
+WHISKER_COLOR_ORDER_W = [
+    'white', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
+WHISKER_COLOR_ORDER_K = [
+    'k', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
+
 def load_whisker_traces(whisk_file):
     """Load the traces, return as frame2segment_id2whisker_seg"""
     frame2segment_id2whisker_seg = trace.Load_Whiskers(whisk_file)

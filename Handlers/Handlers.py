@@ -76,9 +76,6 @@ class VideoTrackedWhiskersHandler(CalculationHandlerWithoutDb):
     def new_path(self):
         return self.video_session.name + '.tracked_whiskers.mkv'
 
-# whisker colors
-whisker_color_l = ['white', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
-
 class VideoColorizedWhiskersHandler(CalculationHandlerWithoutDb):
     """Tracked whiskers video. Side effect of colorizing"""
     _name = 'video_colorized_whiskers'
@@ -184,6 +181,6 @@ class VideoColorizedWhiskersHandler(CalculationHandlerWithoutDb):
                 typical_edges_hist2d=typical_edges_hist2d,
                 input_frame_offset=input_frame_offset,
                 post_contact_linger=5,
-                contact_colors=whisker_color_l,
+                contact_colors=whiskvid.WHISKER_COLOR_ORDER_W,
                 get_extra_text=get_extra_text,
                 )
