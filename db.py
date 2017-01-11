@@ -546,7 +546,7 @@ def load_everything_from_session(session, db):
 def add_trials_to_tac(tac, v2b_fit, trial_matrix, drop_late_contacts=False):
     """Add the trial numbers to tac and return it
     
-    trial_matrix should already have "choice_time" column from BeWatch.misc
+    trial_matrix should already have "choice_time" column from MCwatch.behavior.misc
     
     Also adds "vtime" (in the spurious 30fps timebase)
     and "btime" (using fit)

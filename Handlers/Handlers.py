@@ -12,7 +12,7 @@ from ContactsSummaryHandlers import (
 import numpy as np
 import tables
 import whiskvid
-import BeWatch
+import MCwatch.behavior
 import WhiskiWrap
 
 class MonitorVideoHandler(CalculationHandler):
@@ -118,7 +118,7 @@ class VideoColorizedWhiskersHandler(CalculationHandlerWithoutDb):
 
         # Get trial matrix
         bsession = self.video_session.bsession_name
-        tm = BeWatch.db.get_trial_matrix(bsession, add_rwin_and_choice_times=True)
+        tm = MCwatch.behavior.db.get_trial_matrix(bsession, add_rwin_and_choice_times=True)
 
         # Get the frame at which the chocie was made
         choice_vtime = np.polyval(self.video_session.fit_b2v, tm['choice_time'])

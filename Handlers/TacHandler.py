@@ -3,7 +3,7 @@ from base import *
 import numpy as np
 import pandas
 import my
-import BeWatch
+import MCwatch.behavior
 
 class TacHandler(CalculationHandler):
     _db_field_path = 'tac_filename'
@@ -133,7 +133,7 @@ class TacHandler(CalculationHandler):
         if add_trial_info:
             # Get trial matrix
             bsession = self.video_session.bsession_name
-            trial_matrix = BeWatch.db.get_trial_matrix(bsession, True)
+            trial_matrix = MCwatch.behavior.db.get_trial_matrix(bsession, True)
 
             # Associate each trial with a tac
             tac['trial'] = trial_matrix.index[

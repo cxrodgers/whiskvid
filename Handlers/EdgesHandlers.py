@@ -5,7 +5,7 @@ import pandas
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import my
-import BeWatch
+import MCwatch.behavior
 
 def get_int_input_with_default(name, value):
     """Get an integer input with a default value"""
@@ -309,7 +309,7 @@ class EdgeSummaryHandler(CalculationHandler):
         
         ## Begin handler-specific stuff
         # Get trial matrix
-        trial_matrix = BeWatch.db.get_trial_matrix(
+        trial_matrix = MCwatch.behavior.db.get_trial_matrix(
             self.video_session.bsession_name, True)
 
         # Get edges

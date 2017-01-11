@@ -1,7 +1,7 @@
 import pandas
 import numpy as np
 from base import CalculationHandler
-import BeWatch
+import MCwatch.behavior
 
 class ColorizedWhiskerEndsHandler(CalculationHandler):
     """Whisker ends after colorizing"""
@@ -24,7 +24,7 @@ class ColorizedWhiskerEndsHandler(CalculationHandler):
 
         # Get trial matrix
         bsession = self.video_session.bsession_name
-        tm = BeWatch.db.get_trial_matrix(bsession, True)
+        tm = MCwatch.behavior.db.get_trial_matrix(bsession, True)
 
         # Get the trigger times
         rwin_open_times_by_trial = tm['rwin_time']

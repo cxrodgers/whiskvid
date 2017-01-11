@@ -12,7 +12,7 @@ from Handlers import *
 import runner.models
 
 # For syncing
-import BeWatch
+import MCwatch.behavior
 import my.misc
 
 # Search in the following order for the session
@@ -209,7 +209,7 @@ class VideoSession(object):
             raise ValueError("found 0 or 2+ matching behavioral sessions")
         bsession = qs.first()
         
-        # Problem is that the below code needs the BeWatch magic to
+        # Problem is that the below code needs the MCwatch.behavior magic to
         # set the path correctly for the current locale.
         #~ # Copy the behavioral file into the video directory
         #~ bfile = bsession.logfile
@@ -246,15 +246,15 @@ class VideoSession(object):
         if not force and already_done:
             return
 
-        # Use BeWatch to get behavior file name locale-specific
-        bdf = BeWatch.db.get_behavior_df()
+        # Use MCwatch.behavior to get behavior file name locale-specific
+        bdf = MCwatch.behavior.db.get_behavior_df()
         bfile = bdf.set_index('session').loc[self.bsession_name, 'filename']
         
         # Monitor video
         video_file = self.data.monitor_video.get_path
         
         # Sync it
-        res = BeWatch.syncing.sync_video_with_behavior(
+        res = MCwatch.behavior.syncing.sync_video_with_behavior(
             bfile=bfile,
             lums=None, 
             video_file=video_file, 

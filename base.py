@@ -25,7 +25,7 @@ import os
 import scipy.ndimage
 import my
 import ArduFSM
-import BeWatch
+import MCwatch.behavior
 import whiskvid
 import WhiskiWrap
 import matplotlib.pyplot as plt
@@ -505,9 +505,9 @@ def sync_with_behavior(session, light_delta=30, diffsize=2, refrac=50,
 def sync_with_behavior_nodb(video_file, bfile, light_delta, diffsize, refrac):
     """Sync video with behavioral file
     
-    This got moved to BeWatch.syncing
+    This got moved to MCwatch.behavior.syncing
     """    
-    return BeWatch.syncing.sync_video_with_behavior(bfile=bfile,
+    return MCwatch.behavior.syncing.sync_video_with_behavior(bfile=bfile,
         lums=None, video_file=video_file, light_delta=light_delta,
         diffsize=diffsize, refrac=refrac, assumed_fps=30.,
         error_if_no_fit=True)
@@ -599,7 +599,7 @@ def make_overlay_image_nodb(trialnum2frame=None,
     b2v_fit=None, trial_matrix=None, verbose=True, ax=None):
     """Make overlays of shapes to show positioning.
     
-    Wrapper over the methods in BeWatch.overlays
+    Wrapper over the methods in MCwatch.behavior.overlays
 
     trialnum2frame : if known
         Otherwise, provide behavior_filename, video_filename, and b2v_fit
@@ -611,14 +611,14 @@ def make_overlay_image_nodb(trialnum2frame=None,
     if trialnum2frame is None:
         if verbose:
             print "calculating trialnum2frame"
-        trialnum2frame = BeWatch.overlays.extract_frames_at_retraction_times(
+        trialnum2frame = MCwatch.behavior.overlays.extract_frames_at_retraction_times(
             behavior_filename=behavior_filename, 
             video_filename=video_filename, 
             b2v_fit=b2v_fit, 
             verbose=verbose)
 
     # Calculate sess_meaned_frames
-    sess_meaned_frames = BeWatch.overlays.calculate_sess_meaned_frames(
+    sess_meaned_frames = MCwatch.behavior.overlays.calculate_sess_meaned_frames(
         trialnum2frame, trial_matrix)
 
     #~ # Save trial_frames_by_type
@@ -629,7 +629,7 @@ def make_overlay_image_nodb(trialnum2frame=None,
         f, ax = plt.subplots(figsize=(6.4, 6.2))
 
     # Make the trial_frames_all_types and save it
-    C = BeWatch.overlays.make_overlay(sess_meaned_frames, ax, meth='all')
+    C = MCwatch.behavior.overlays.make_overlay(sess_meaned_frames, ax, meth='all')
     #~ whiskvid.db.TrialFramesAllTypes.save(overlay_image_name, C)
     
     return trialnum2frame, sess_meaned_frames, C
@@ -736,7 +736,7 @@ def video_edge_tac(session, d_temporal=5, d_spatial=1, stop_after_trial=None,
     everything = whiskvid.db.load_everything_from_session(session, db)
     tac = everything['tac']   
     trial_matrix = everything['trial_matrix']
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+    trial_matrix['choice_time'] = MCwatch.behavior.misc.get_choice_times(
         db.loc[session, 'bfile'])
     choice_btime = np.polyval(everything['b2v_fit'], trial_matrix['choice_time'])
     trial_matrix['choice_bframe'] = np.rint(choice_btime * 30)    
@@ -780,7 +780,7 @@ def plot_perf_vs_contacts(session):
     v2b_fit = res['v2b_fit']
 
     # Get trial timings
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+    trial_matrix['choice_time'] = MCwatch.behavior.misc.get_choice_times(
         db.loc[session, 'bfile'])
 
     # Add trials
@@ -841,7 +841,7 @@ def logreg_perf_vs_contacts(session):
         1/0
 
     # Get trial timings
-    trial_matrix['choice_time'] = BeWatch.misc.get_choice_times(
+    trial_matrix['choice_time'] = MCwatch.behavior.misc.get_choice_times(
         db.loc[session, 'bfile'])
     trial_matrix['vchoice_time'] = np.polyval(b2v_fit, trial_matrix['choice_time'])
 
@@ -994,7 +994,7 @@ def get_triggered_whisker_angle(vsession, **kwargs):
     
     # Get trial matrix
     bsession = vsession.bsession_name
-    tm = BeWatch.db.get_trial_matrix(bsession, True)
+    tm = MCwatch.behavior.db.get_trial_matrix(bsession, True)
     
     # Trigger
     twa = get_triggered_whisker_angle_nodb(mwe, v2b_fit, tm, **kwargs)
