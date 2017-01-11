@@ -15,6 +15,8 @@ class TacHandler(CalculationHandler):
     )
 
     # The fields that are required before calculate can run
+    # monitor_video is required for set_params, not calculate
+    # so the error is thrown at the wrong time
     _required_fields_for_calculate = (
         'monitor_video', 'all_edges_filename', 'param_face_side',
         'whiskers_table_filename',
