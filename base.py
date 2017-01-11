@@ -1089,3 +1089,46 @@ def normalize_edge_summary(edge_summary):
     edge_hist2d = np.mean(normalized_es_l, axis=0)
     
     return edge_hist2d
+
+def add_trial_info_to_video_dataframe(df, trial_matrix, v2b_fit,
+    df_column='frame', columns_to_join=None):
+    """Join trial information onto each row.
+    
+    df : dataframe with a column called 'frame'
+    trial_matrix : trial matrix for that session
+        Should contain a column called 'start_time'
+    v2b_fit : fit between video and behavior
+    df_column : name of column in df if not 'frame'
+    columns_to_join : columns from trial_matrix to join onto df
+        If None, the following is used: ['rewside', 'outcome', 'choice_time', 
+            'isrnd', 'choice', 'rwin_time',]
+    
+    The frame numbers will be converted to behavior time. Then each
+    row will be associated with a trial based on trial_matrix.start_time.
+    Finally the other columns in trial_matrix are joined onto df.
+    
+    Returns : copy of df with those columns added
+    """
+    # Columns to join
+    if columns_to_join is None:
+        columns_to_join = ['rewside', 'outcome', 'choice_time', 
+            'isrnd', 'choice', 'rwin_time',]
+    
+    # Copy
+    df = df.copy()
+
+    # Convert to behavior time
+    # "vtime" is in the spurious 30fps timebase
+    # the fits take this into account
+    df['vtime'] = df[df_column] / 30.
+    df['btime'] = np.polyval(v2b_fit, df['vtime'].values)
+    
+    # Associate each row in df with a trial
+    df['trial'] = trial_matrix.index[
+        np.searchsorted(trial_matrix['start_time'].values, 
+            df['btime'].values) - 1]    
+
+    # Add rewside and outcome to df
+    df = df.join(trial_matrix[columns_to_join], on='trial')
+
+    return df

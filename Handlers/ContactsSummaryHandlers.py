@@ -2,6 +2,8 @@
 from base import *
 import numpy as np
 import pandas
+import whiskvid
+import MCwatch
 
 class ContactsSummaryHandler(CalculationHandler):
     """Contacts summmary"""
@@ -100,6 +102,25 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
             self.save_data(ccs)
         
         return ccs
+    
+    def load_data(self, add_trial_info=True, columns_to_join=None):
+        """Load ccs and optionally add trial info"""
+        # Parent class to load the raw data
+        res = super(ColorizedContactsSummaryHandler, self).load_data()
+
+        # Optionally add trial info
+        if add_trial_info:
+            # Get behavioral data
+            bsession = self.video_session.bsession_name
+            trial_matrix = MCwatch.behavior.db.get_trial_matrix(bsession, True)
+            v2b_fit = self.video_session.fit_v2b
+            
+            # Add it
+            res = whiskvid.add_trial_info_to_video_dataframe(res, trial_matrix, 
+                v2b_fit, df_column='frame_start', 
+                columns_to_join=columns_to_join)
+        
+        return res
 
 def colorize_contacts_summary_nodb(ctac, cs, cwe):
     """Colorize the contacts in cs using colorized_whisker_ends
