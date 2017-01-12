@@ -78,6 +78,8 @@ import db
 # Import the functions for analyzing data
 from base import *
 
+import plotting
+
 
 try:
     import output_video

@@ -909,3 +909,23 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
         'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}
     return res
 ## End edge summary dumping
+
+
+def filter_edge_summary_by_rewside(edge_summary, rewside):
+    """Keep only data for rewside left or right
+    
+    Not a method on load_data because if we want to get left and right we
+    don't want to load twice (too slow)
+    """
+    es_left = edge_summary.copy()
+    new_rwsd_l = []
+    new_H_l = []
+    for rwsd, H in zip(es_left['rewside_l'], es_left['H_l']):
+        if rwsd == rewside:
+            new_rwsd_l.append(rwsd)
+            new_H_l.append(H)
+    es_left['H_l'] = new_H_l
+    es_left['rewside_l'] = new_rwsd_l
+    
+    return es_left
+

@@ -108,3 +108,70 @@ def triggered_on_rwin_nodb(whisker_colors_df, cwe, v2b_fit, trigger_times,
         axis=1).dropna(axis=1)        
 
     return twa_by_whisker
+
+
+
+def calculate_histogram_tips(sub_cwe, row_edges=None, col_edges=None,
+    frame_width=None, frame_height=None, n_row_bins=50, n_col_bins=50,):
+    """Calculate 2d histogram of whisker tips
+    
+    sub_cwe : DataFrame with columns 'tip_x' and 'tip_y'
+    row_edges, col_edges : Edges for histogramming
+        If None, can provide size of frame and number of bins
+    
+    Returns: H, col_edges, row_edges
+        H is transposed from the standard np.histogram2d in order to orient
+        it "like an image"
+    """
+    if col_edges is None:
+        col_edges = np.linspace(0, frame_width, n_col_bins + 1)
+    if row_edges is None:
+        row_edges = np.linspace(0, frame_height, n_row_bins + 1)
+    
+    # Histogram tip
+    H, col_edges, row_edges = np.histogram2d(
+        x=sub_cwe.tip_x, y=sub_cwe.tip_y,
+        bins=[col_edges, row_edges],
+        normed=True,
+    )
+
+    return H.T, col_edges, row_edges
+
+def calculate_histogram_tips_over_whiskers(cwe, color2whisker, **kwargs):
+    """Calculate 2d histogram of tips of each whisker separately
+    
+    cwe : DataFrame with columns 'color_group', 'tip_x', 'tip_y'
+        This function extracts each color_group and histograms it with
+        calculate_histogram_tips
+    
+    color2whisker : dict of color_group integer to whisker name
+    
+    **kwargs : see calculate_histogram_tips
+    
+    Returns: H_tip, color_groups, whisker_labels
+        H_tip : array of shape (n_whiskers, n_rows, n_cols)
+            Each histogram is normed separately for each whisker
+        color_groups : list of color groups for each entry in H_tip
+        whisker_labels : same but for whisker labels
+        col_edges, row_edges
+    """
+    H_tip_l = []
+    whisker_labels = []
+    color_groups = []
+    for color, whisker in color2whisker.items():
+        # Exclude unlabeled
+        if color == 0:
+            continue
+        
+        # Histogram that whisker and append
+        sub_cwe = cwe[cwe.color_group == color]
+        H, col_edges, row_edges = calculate_histogram_tips(sub_cwe, **kwargs)
+        H_tip_l.append(H)
+        
+        # Store the whisker labels
+        color_groups.append(color)
+        whisker_labels.append(whisker)
+    
+    return (np.asarray(H_tip_l), color_groups, whisker_labels, 
+        col_edges, row_edges)
+
