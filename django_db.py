@@ -174,6 +174,21 @@ class VideoSession(object):
             res[n + 1] = s
         return res
     
+    @property
+    def whisker_order(self):
+        """List of whiskers in anatomical order"""
+        whiskers = self._django_object.whisker_colors.split()
+        
+        # Sort: first lowercase greeks, then uppers, then '?'
+        lowers, uppers = [], []
+        for whisker in sorted(whiskers):
+            if whisker.islower():
+                lowers.append(whisker)
+            else:
+                uppers.append(whisker)
+        res = lowers + uppers + ['?']
+        
+        return res
     
     ## Other methods
     # These are things that don't make sense for a Handler
