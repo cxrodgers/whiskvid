@@ -190,6 +190,43 @@ class VideoSession(object):
         
         return res
     
+    @property
+    def whiskers_and_colors(self):
+        """Try to replace color2whisker and whisker_order with this
+        
+        Result is something like this:
+           color_group whisker disp_color_k disp_color_w  anatomical_order
+        0            0       ?            k        white                 4
+        1            1       b            b            b                 0
+        2            2      C1            g            g                 1
+        3            3      C2            r            r                 2
+        4            4      C3            c            c                 3
+        """
+        # Form a dataframe of whisker names, indexed by color_group
+        whisker_color_l = self._django_object.whisker_colors.split()
+        res = pandas.DataFrame.from_dict({
+            'whisker': ['?'] + whisker_color_l,
+            'color_group': range(0, len(whisker_color_l) + 1)
+            })
+        
+        # Add 'disp_color_k' and 'disp_color_w' colummns
+        res['disp_color_k'] = whiskvid.WHISKER_COLOR_ORDER_K[:len(res)]
+        res['disp_color_w'] = whiskvid.WHISKER_COLOR_ORDER_W[:len(res)]
+        
+        # Add an anatomical_order column
+        # Sort: first lowercase greeks, then uppers
+        lowers, uppers = [], []
+        for whisker in sorted(whisker_color_l):
+            if whisker.islower():
+                lowers.append(whisker)
+            else:
+                uppers.append(whisker)
+        anatomical_order = lowers + uppers + ['?']
+        res['anatomical_order'] = [
+            anatomical_order.index(wname) for wname in res['whisker']]
+        
+        return res
+    
     ## Other methods
     # These are things that don't make sense for a Handler
     # Not sure how to encapsulate them exactly
