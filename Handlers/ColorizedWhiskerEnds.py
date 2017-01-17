@@ -1,3 +1,7 @@
+"""Module for loading, processing, quantifying the tips of colorized whiskers.
+
+"""
+
 import pandas
 import numpy as np
 from base import CalculationHandler
@@ -35,9 +39,19 @@ class ColorizedWhiskerEndsHandler(CalculationHandler):
         
         return twa_by_whisker
 
-def triggered_on_rwin_nodb(whisker_colors_df, cwe, v2b_fit, trigger_times,
+def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
     relative_time_bins=None):
-    """Trigger the whisking signal on trigger_times for each whisker"""
+    """Trigger the whisking signal on trigger_times for each whisker
+    
+    whisker_colors_df : Series
+        index is whisker color_group
+        values are whisker names
+        Each entry in this is used to lock to. Whiskers that don't
+        have any data are skipped.
+    
+    trigger_times : Series of times to lock to
+        index will be taken as trial labels
+    """
     if relative_time_bins is None:
         relative_time_bins = np.arange(-3.5, 5, .05)
 
@@ -47,6 +61,14 @@ def triggered_on_rwin_nodb(whisker_colors_df, cwe, v2b_fit, trigger_times,
         ## Extract data just for this whisker
         angle_by_frame = cwe.loc[cwe.color_group == color, 
             ['frame', 'angle']].set_index('frame')['angle']
+        
+        # Check we have data
+        if len(angle_by_frame) == 0:
+            continue
+        
+        # Check for something that will cause problems later
+        if angle_by_frame.index.has_duplicates:
+            raise ValueError("angle_by_frame has duplicates in its index")
 
         # time of each row
         angle_vtime = angle_by_frame.index.values / 30.
@@ -95,7 +117,7 @@ def triggered_on_rwin_nodb(whisker_colors_df, cwe, v2b_fit, trigger_times,
         twa = pandas.DataFrame(
             interpolated.values.reshape(
                 (len(trigger_times), len(relative_time_bins))).T,
-            index=relative_time_bins, columns=trigger_times.index
+            index=relative_time_bins, columns=trigger_times.index.copy()
         )
         twa.index.name = 'time'
         twa.columns.name = 'trial'
