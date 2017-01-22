@@ -24,9 +24,28 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     
     nframe : number of frame
         This is used to determine which whiskers and which contacts to plot
+    
     frame : the image data
+    
     whisker_handles : handles to whiskers lines that will be deleted
+    
     contacts_table : contacts to plot
+        if None, no contacts are plotted
+    
+    contact_positions_l : if contacts are plotted, these handles are used
+    
+    contact_colors : looks like this is used to color the whiskers?
+    
+    whiskers_table, whiskers_file_handle : used to plot the whiskers
+        if either is None, no whiskers are plotted
+    
+    whisker_handles : if whiskers are plotted, all of these handles
+        are first deleted. The new whisker handles are stored in it.
+    
+    edge_a : edge to plot
+        if None, no edge is plotted.
+    
+    edge_a_obj : if an edge is plotted, this handle is used
     
     truncate_edge_y : if Not None, drops everything with y < this value
         in the edge. This is useful for when the shape edge connects
@@ -388,6 +407,30 @@ def plot_stills_with_overlays_from_data(
     contact_colors=None,
     ):
     """Clone of write_video_with_overlays_from_data for still images.
+    
+    This function creates the graphics handles for the still image and
+    the contacts and the edges and passes them to `frame_update`.
+    
+    monitor_video_filename : video to get stills from
+    
+    frame_triggers : times of stills, in seconds
+        Will be converted to array of ints
+    
+    input_video_alpha : the still image will have this alpha applied to it
+    
+    typical_edges_hist2d : if None, nothing happens
+        Otherwise, it is displayed in another image in the axis with
+        alpha equal to `edge_alpha`
+    
+    whiskers_table, whiskers_file_handle, contacts_table, 
+        post_contact_linger :
+        passed to `frame_update`
+        
+        `whiskers_file_handle` is closed at the end of this function if
+        it is not None
+    
+    contact_colors : used to initiate the graphics handles for the contacts
+        and then passed to `frame_update`
     
     """
     # Parse the arguments
