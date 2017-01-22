@@ -34,7 +34,19 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     
     contact_positions_l : if contacts are plotted, these handles are used
     
-    contact_colors : looks like this is used to color the whiskers?
+    contact_colors : array of color spec
+        The whiskers are colored by indexing into this array using the
+        `color_group` column in `whiskers_table`. Default is yellow if
+        that column does not exist. Note the color is explicitly used here
+        because each whisker gets a fresh handle.
+        
+        The contacts are implicitly colored by the handles in 
+        `contact_positions_l`. We determine which handle to use for each
+        contact by indexing into `contact_colors` using the
+        `color_group` column in `whiskers_table`. If that column doesn't
+        exist, the `group` column is modded with the length of this array.
+        If neither column exists, the first handle in `contact_positions_l`
+        is used for everything.
     
     whiskers_table, whiskers_file_handle : used to plot the whiskers
         if either is None, no whiskers are plotted
@@ -271,8 +283,7 @@ def write_video_with_overlays_from_data(output_filename,
     input_height = int(input_height)
 
     if contact_colors is None:
-        n_colors = 7
-        contact_colors = my.plot.generate_colorbar(n_colors)
+        contact_colors = my.plot.generate_colorbar(7)
 
     ## Set up the graphical handles
     if verbose:
@@ -404,7 +415,9 @@ def plot_stills_with_overlays_from_data(
     whiskers_table=None, whiskers_file_handle=None,
     edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
     contacts_table=None, post_contact_linger=50,
+    imshow_interpolation='bilinear',
     contact_colors=None,
+    force_contact_color=6,
     ):
     """Clone of write_video_with_overlays_from_data for still images.
     
@@ -430,7 +443,13 @@ def plot_stills_with_overlays_from_data(
         it is not None
     
     contact_colors : used to initiate the graphics handles for the contacts
-        and then passed to `frame_update`
+        and then passed to `frame_update`. Note that this will also control
+        the whiskers colors. If None, then WHISKER_COLOR_ORDER_W is used
+    
+    force_contact_color : if not None, then all contacts will be colored
+        the same color, which is this index into contact_colors. This is done
+        by copying contacts_table and overwriting 'color_group' with this
+        value.
     
     """
     # Parse the arguments
@@ -440,8 +459,11 @@ def plot_stills_with_overlays_from_data(
         monitor_video_filename)
 
     if contact_colors is None:
-        n_colors = 7
-        contact_colors = my.plot.generate_colorbar(n_colors)
+        contact_colors = whiskvid.WHISKER_COLOR_ORDER_W
+    
+    if force_contact_color is not None:
+        contacts_table = contacts_table.copy()
+        contacts_table['color_group'] = force_contact_color
 
     f, axa = my.plot.auto_subplot(len(frame_triggers), figsize=(15, 10))
     for frame_trigger, ax in zip(frame_triggers, axa.flatten()):
@@ -458,7 +480,9 @@ def plot_stills_with_overlays_from_data(
         # Plot input video frames
         in_image = np.zeros((input_height, input_width))
         im2 = my.plot.imshow(in_image, ax=ax, 
-            axis_call='image', cmap=plt.cm.gray, extent=(0, input_width, input_height, 0))
+            axis_call='image', cmap=plt.cm.gray, 
+            interpolation=imshow_interpolation,
+            extent=(0, input_width, input_height, 0))
         im2.set_alpha(input_video_alpha)
         im2.set_clim((0, 255))
 
