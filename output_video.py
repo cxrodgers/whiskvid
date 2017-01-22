@@ -413,7 +413,7 @@ def plot_stills_with_overlays_from_data(
     
     monitor_video_filename : video to get stills from
     
-    frame_triggers : times of stills, in seconds
+    frame_triggers : frame numbers of stills
         Will be converted to array of ints
     
     input_video_alpha : the still image will have this alpha applied to it
