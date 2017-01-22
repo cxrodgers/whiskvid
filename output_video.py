@@ -420,7 +420,8 @@ def plot_stills_with_overlays_from_data(
     imshow_interpolation='bilinear',
     contact_colors=None,
     force_contact_color=6,
-    frame_clim=None,
+    frame_clim=None, axa=None,
+    contact_ms=15,
     **kwargs):
     """Clone of write_video_with_overlays_from_data for still images.
     
@@ -454,7 +455,12 @@ def plot_stills_with_overlays_from_data(
         by copying contacts_table and overwriting 'color_group' with this
         value.
     
+    contact_ms : marker size of contacts
+    
     frame_clim : to apply to clim of that image. Default: (0, 255)
+    
+    axa : if None, a figure and axes are created
+        Otherwise axa.flatten() needs to be the same length as frame_triggers
     
     Other kwargs are passed to `frame_update`
     
@@ -472,7 +478,11 @@ def plot_stills_with_overlays_from_data(
         contacts_table = contacts_table.copy()
         contacts_table['color_group'] = force_contact_color
 
-    f, axa = my.plot.auto_subplot(len(frame_triggers), figsize=(15, 10))
+    if axa is None:
+        f, axa = my.plot.auto_subplot(len(frame_triggers), figsize=(15, 10))
+    else:
+        f = None
+    
     for frame_trigger, ax in zip(frame_triggers, axa.flatten()):
         # Load the frame
         frame, stdout, stderr = my.video.get_frame(monitor_video_filename, 
@@ -502,7 +512,7 @@ def plot_stills_with_overlays_from_data(
             contact_positions_l = []
             for color in contact_colors:
                 contact_positions_l.append(
-                    ax.plot([np.nan], [np.nan], '.', ms=15, color=color)[0])
+                    ax.plot([np.nan], [np.nan], '.', ms=contact_ms, color=color)[0])
             #~ contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
         else:
             contact_positions_l = None
@@ -537,4 +547,6 @@ def plot_stills_with_overlays_from_data(
     for ax in axa.flatten():
         ax.set_xticks([])
         ax.set_yticks([])
-    f.tight_layout()
+
+    if f is not None:
+        f.tight_layout()
