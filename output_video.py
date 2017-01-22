@@ -17,7 +17,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
     im2, edge_a_obj, contact_positions_l,
     d_spatial, d_temporal, contact_colors,
-    truncate_edge_y=100):
+    truncate_edge_y=100, whisker_lw=1):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -53,6 +53,8 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     
     whisker_handles : if whiskers are plotted, all of these handles
         are first deleted. The new whisker handles are stored in it.
+    
+    whisker_lw : line width of whiskers
     
     edge_a : edge to plot
         if None, no edge is plotted.
@@ -135,7 +137,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             line, = ax.plot(
                 whiskers_file_handle.root.pixels_x[idx],
                 whiskers_file_handle.root.pixels_y[idx],
-                color=color)
+                color=color, lw=whisker_lw)
             whisker_handles.append(line)
             #~ line, = ax.plot([row['fol_x']], [row['fol_y']], 'gs')
             #~ whisker_handles.append(line)
@@ -418,7 +420,8 @@ def plot_stills_with_overlays_from_data(
     imshow_interpolation='bilinear',
     contact_colors=None,
     force_contact_color=6,
-    ):
+    frame_clim=None,
+    **kwargs):
     """Clone of write_video_with_overlays_from_data for still images.
     
     This function creates the graphics handles for the still image and
@@ -450,6 +453,10 @@ def plot_stills_with_overlays_from_data(
         the same color, which is this index into contact_colors. This is done
         by copying contacts_table and overwriting 'color_group' with this
         value.
+    
+    frame_clim : to apply to clim of that image. Default: (0, 255)
+    
+    Other kwargs are passed to `frame_update`
     
     """
     # Parse the arguments
@@ -484,7 +491,11 @@ def plot_stills_with_overlays_from_data(
             interpolation=imshow_interpolation,
             extent=(0, input_width, input_height, 0))
         im2.set_alpha(input_video_alpha)
-        im2.set_clim((0, 255))
+        
+        if frame_clim is None:
+            im2.set_clim((0, 255))
+        else:
+            im2.set_clim(frame_clim)
 
         # Plot contact positions dynamically
         if contacts_table is not None:
@@ -515,7 +526,9 @@ def plot_stills_with_overlays_from_data(
             im2=im2, 
             edge_a_obj=edge_a_obj, 
             contact_positions_l=contact_positions_l,
-            d_spatial=1, d_temporal=1, contact_colors=contact_colors)
+            d_spatial=1, d_temporal=1, contact_colors=contact_colors,
+            **kwargs
+        )
 
     # Clean up
     if whiskers_file_handle is not None:
