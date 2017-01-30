@@ -34,10 +34,84 @@ class ColorizedWhiskerEndsHandler(CalculationHandler):
         rwin_open_times_by_trial = tm['rwin_time']
         trigger_times = rwin_open_times_by_trial.dropna()
 
-        twa_by_whisker = triggered_on_rwin_nodb(whisker_colors_df, 
+        twa_by_whisker = lock_cwe_to_triggers(whisker_colors_df, 
             cwe, v2b_fit, trigger_times, relative_time_bins=relative_time_bins)
         
         return twa_by_whisker
+
+def lock_angle_by_frame_to_triggers(angle_by_frame, v2b_fit, trigger_times,
+    relative_time_bins):
+    """Interpolate data by frame to specified time bins
+    
+    angle_by_frame : indexed by frame
+    
+    v2b_fit : used to convert to video time
+    
+    trigger_times : triggers in video time, indexed by trial
+    
+    relative_time_bins : how to resample each trial
+    
+    Returns: DataFrame
+        index: relative_time_bins
+        coluns: trials
+    """
+    # Check for something that will cause problems later
+    if angle_by_frame.index.has_duplicates:
+        raise ValueError("angle_by_frame has duplicates in its index")
+
+    # time of each row
+    angle_vtime = angle_by_frame.index.values / 30.
+    angle_btime = np.polyval(v2b_fit, angle_vtime)
+
+    # Index the angle based on the btime
+    angle_by_btime = pandas.Series(index=angle_btime, 
+        data=angle_by_frame.values)
+    angle_by_btime.index.name = 'btime'
+
+    ## Interpolate angle_by_btime at the new time bins that we want
+    # Get absolute time bins
+    absolute_time_bins_l = []
+    for trial, trigger_time in trigger_times.iteritems():
+        # Get time bins relative to trigger
+        absolute_time_bins = relative_time_bins + trigger_time
+        absolute_time_bins_l.append(absolute_time_bins)
+
+    # Drop the ones before and after data
+    # By default pandas interpolate fills forward but not backward
+    absolute_time_bins_a = np.concatenate(absolute_time_bins_l)
+    absolute_time_bins_a_in_range = absolute_time_bins_a[
+        (absolute_time_bins_a < angle_by_btime.index.values.max()) &
+        (absolute_time_bins_a > angle_by_btime.index.values.min())
+    ].copy()
+
+    # Make bigger index with positions for each of the desired time bins
+    # Ensure it doesn't contain duplicates
+    new_index = (angle_by_btime.index | 
+        pandas.Index(absolute_time_bins_a_in_range))
+    new_index = new_index.drop_duplicates()
+
+    # Interpolate
+    resampled_session = angle_by_btime.reindex(new_index).interpolate(
+        'index')
+    assert not np.any(resampled_session.isnull())
+
+    ## Extract interpolated times for each trial
+    # Take interpolated values at each of the absolute time bins
+    # Will be NaN before and after the data
+    interpolated = resampled_session.ix[absolute_time_bins_a]
+    assert interpolated.shape == absolute_time_bins_a.shape
+
+    ## Reshape
+    # One column per trial
+    twa = pandas.DataFrame(
+        interpolated.values.reshape(
+            (len(trigger_times), len(relative_time_bins))).T,
+        index=relative_time_bins, columns=trigger_times.index.copy()
+    )
+    twa.index.name = 'time'
+    twa.columns.name = 'trial'
+    
+    return twa
 
 def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
     relative_time_bins=None):
@@ -51,6 +125,8 @@ def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
     
     trigger_times : Series of times to lock to
         index will be taken as trial labels
+    
+    relative_time_bins : defaults to np.arange(-3.5, 5, .05)
     """
     if relative_time_bins is None:
         relative_time_bins = np.arange(-3.5, 5, .05)
@@ -65,62 +141,10 @@ def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
         # Check we have data
         if len(angle_by_frame) == 0:
             continue
-        
-        # Check for something that will cause problems later
-        if angle_by_frame.index.has_duplicates:
-            raise ValueError("angle_by_frame has duplicates in its index")
 
-        # time of each row
-        angle_vtime = angle_by_frame.index.values / 30.
-        angle_btime = np.polyval(v2b_fit, angle_vtime)
-
-        # Index the angle based on the btime
-        angle_by_btime = pandas.Series(index=angle_btime, 
-            data=angle_by_frame.values)
-        angle_by_btime.index.name = 'btime'
-
-        ## Interpolate angle_by_btime at the new time bins that we want
-        # Get absolute time bins
-        absolute_time_bins_l = []
-        for trial, trigger_time in trigger_times.iteritems():
-            # Get time bins relative to trigger
-            absolute_time_bins = relative_time_bins + trigger_time
-            absolute_time_bins_l.append(absolute_time_bins)
-
-        # Drop the ones before and after data
-        # By default pandas interpolate fills forward but not backward
-        absolute_time_bins_a = np.concatenate(absolute_time_bins_l)
-        absolute_time_bins_a_in_range = absolute_time_bins_a[
-            (absolute_time_bins_a < angle_by_btime.index.values.max()) &
-            (absolute_time_bins_a > angle_by_btime.index.values.min())
-        ].copy()
-
-        # Make bigger index with positions for each of the desired time bins
-        # Ensure it doesn't contain duplicates
-        new_index = (angle_by_btime.index | 
-            pandas.Index(absolute_time_bins_a_in_range))
-        new_index = new_index.drop_duplicates()
-
-        # Interpolate
-        resampled_session = angle_by_btime.reindex(new_index).interpolate(
-            'index')
-        assert not np.any(resampled_session.isnull())
-
-        ## Extract interpolated times for each trial
-        # Take interpolated values at each of the absolute time bins
-        # Will be NaN before and after the data
-        interpolated = resampled_session.ix[absolute_time_bins_a]
-        assert interpolated.shape == absolute_time_bins_a.shape
-
-        ## Reshape
-        # One column per trial
-        twa = pandas.DataFrame(
-            interpolated.values.reshape(
-                (len(trigger_times), len(relative_time_bins))).T,
-            index=relative_time_bins, columns=trigger_times.index.copy()
-        )
-        twa.index.name = 'time'
-        twa.columns.name = 'trial'
+        # Lock to time bins
+        twa = lock_angle_by_frame_to_triggers(
+            angle_by_frame, v2b_fit, trigger_times, relative_time_bins)        
 
         ## Store
         color2twa[whisker_name] = twa
@@ -130,8 +154,6 @@ def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
         axis=1).dropna(axis=1)        
 
     return twa_by_whisker
-
-
 
 def calculate_histogram_tips(sub_cwe, row_edges=None, col_edges=None,
     frame_width=None, frame_height=None, n_row_bins=50, n_col_bins=50,):
