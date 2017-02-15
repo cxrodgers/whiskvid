@@ -178,6 +178,7 @@ class AllEdgesHandler(CalculationHandler):
         if not force:
             # Check if data available
             data_available = True
+            warn_about_field = False
             try:
                 self.get_path
             except FieldNotSetError:
@@ -861,11 +862,11 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
     trial_matrix['choice_bframe'] = np.rint(choice_btime * vid_fps)
     
     # hist2d the edges for each rewside * servo_pos
-    gobj = trial_matrix.groupby(['rewside', 'servo_pos'])
-    rwsd_l, srvpos_l, H_l = [], [], []
+    gobj = trial_matrix.groupby(['rewside', 'servo_pos', 'stepper_pos'])
+    rwsd_l, srvpos_l, stppos_l, H_l = [], [], [], []
     col_edges = np.arange(0, v_width, hist_pix_w)
     row_edges = np.arange(0, v_height, hist_pix_h)    
-    for (rwsd, srvpos), subtm in gobj:
+    for (rwsd, srvpos, stppos), subtm in gobj:
         # Extract the edges at choice time from all trials of this type
         n_bad_edges = 0
         sub_edge_a = []
@@ -901,12 +902,15 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
         # Store
         rwsd_l.append(rwsd)
         srvpos_l.append(srvpos)
+        stppos_l.append(stppos)
         H_l.append(H.T)
     
     # Save
     res = {
         'row_edges': row_edges, 'col_edges': col_edges, 
-        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}
+        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l,
+        'stppos_l': stppos_l
+    }
     return res
 ## End edge summary dumping
 
@@ -929,3 +933,28 @@ def filter_edge_summary_by_rewside(edge_summary, rewside):
     
     return es_left
 
+def filter_edge_summary_by_radius(edge_summary, radius='harder'):
+    """Keep only data for stppos [50, 150] or [100, 199]
+
+    """
+    if radius == 'harder':
+        stppos_l = [100, 199]
+    else:
+        stppos_l = [50, 150]
+    
+    es_filtered = edge_summary.copy()
+    
+    new_stppos_l, new_srvpos_l, new_reside_l, new_H_l = [], [], [], []
+    for idx, H in enumerate(es_filtered['H_l']):
+        if es_filtered['stppos_l'][idx] in stppos_l:
+            new_stppos_l.append(es_filtered['stppos_l'][idx])
+            new_srvpos_l.append(es_filtered['srvpos_l'][idx])
+            new_reside_l.append(es_filtered['rewside_l'][idx])
+            new_H_l.append(es_filtered['H_l'][idx])
+    es_filtered['H_l'] = new_H_l
+    es_filtered['stppos_l'] = new_stppos_l
+    es_filtered['srvpos_l'] = new_srvpos_l
+    es_filtered['rewside_l'] = new_reside_l
+    
+    
+    return es_filtered
