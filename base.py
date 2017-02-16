@@ -30,6 +30,7 @@ import whiskvid
 import WhiskiWrap
 import matplotlib.pyplot as plt
 import pandas
+import kkpandas
 
 try:
     import tables
@@ -1138,3 +1139,114 @@ def add_trial_info_to_video_dataframe(df, trial_matrix, v2b_fit,
     df = df.join(trial_matrix[columns_to_join], on='trial')
 
     return df
+
+def bin_ccs(ccs, locking_times, trial_labels,
+    t_start=-2, t_stop=1, nbins=None, binwidth=.005, smoothing_window=None, 
+    video_range_bbase=None,
+    ):
+    """Bin contact times into starts and touching
+    
+    ccs : colorized_contacts_summary
+        Needs to have a column 'whisker' to group by
+        Needs to have 'start_btime' and 'stop_btime' to fold on
+    
+    locking_times : time of each trial to lock on
+    
+    trial_labels : labels of each trial
+    
+    t_start, t_stop : time around each locking time to take
+    
+    nbins : use this many bins
+    
+    binwidth : if nbins is None, calculate it using this
+    
+    smoothing_window : if not None, then uses GaussianSmoother with this
+        smoothing param instead of np.histogram
+    
+    video_range_bbase : tuple (start, stop)
+        This is the time that the video started and stopped in the
+        behavioral timebase. Trials that occurred outside of this range
+        are discarded.
+    
+    Returns: DataFrame
+        The columns are a MultiIndex on (metric, whisker, time)
+        metric: 'start' or 'touching'
+        The index is the trial_labels
+    """
+    ## Generate bins
+    if nbins is None:
+        nbins = int(np.rint((t_stop - t_start) / binwidth)) + 1
+    bins = np.linspace(t_start, t_stop, nbins)
+
+    # Choose smoothing meth
+    if pandas.isnull(smoothing_window):
+        meth = np.histogram
+    else:
+        gs = kkpandas.base.GaussianSmoother(
+            smoothing_window=smoothing_window)
+        meth = gs.smooth    
+    
+    def fold_on_trial_times(flat):
+        """Helper function to fold starts and stops in the same way"""
+        # Fold
+        folded = kkpandas.Folded.from_flat(
+            flat=flat,
+            centers=locking_times,
+            dstart=t_start, dstop=t_stop,
+            flat_range=video_range_bbase,
+            labels=trial_labels
+        )
+        
+        # Bin
+        binned = kkpandas.Binned.from_folded_by_trial(
+            folded, bins=bins, meth=meth)
+        
+        # Label rate
+        binned_rate = binned.rate#.astype(np.int)
+        binned_rate.index = binned.t
+        binned_rate.index.name = 'time'
+        binned_rate.columns.name = 'trial'
+
+        return binned_rate
+
+    ## Iterate over whiskers and generate starts and touching for each
+    starts_l, touching_l, whisker_l = [], [], []
+    for whisker, whisker_ccs in ccs.groupby('whisker'):
+        # Bin the starts
+        binned_starts_rate = fold_on_trial_times(
+            np.sort(whisker_ccs.start_btime.values))
+        
+        # Bin the stops
+        binned_stops_rate = fold_on_trial_times(
+            np.sort(whisker_ccs.stop_btime.values))
+
+        # Construct touching by cumsumming
+        # Need to shift stops so that contacts wholly contained in one bin
+        # will still show up
+        touching = (binned_starts_rate.cumsum() - 
+            binned_stops_rate.cumsum().shift().fillna(0))#.astype(np.int))
+        
+        # This would fail if a touch was already in progress at the
+        # beginning of the window because it might go negative
+        assert (touching >= -1e-10).values.all()
+
+        # Store
+        starts_l.append(binned_starts_rate)
+        touching_l.append(touching)
+        whisker_l.append(whisker)
+    
+    ## Form a dataframe indexed by trial and whisker with bins on columns
+    starts_df = pandas.concat(starts_l, 
+        keys=whisker_l, verify_integrity=True, names=['whisker', 'time'])
+    touching_df = pandas.concat(touching_l, 
+        keys=whisker_l, verify_integrity=True, names=['whisker', 'time'])   
+
+    # Concatenate all metrics and put trials on the rows
+    binned_df = pandas.concat(
+        [starts_df, touching_df],
+        axis=0, verify_integrity=True,
+        keys=['start', 'touching'],
+        names=['metric', 'whisker', 'time'],
+    ).T
+    
+    return binned_df
