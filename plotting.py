@@ -127,3 +127,74 @@ def set_axis_for_image(ax, frame_width, frame_height,
         ax.set_ylim((frame_height, 0))
     else:
         ax.set_ylim((frame_height + half_bin_offset_y, -half_bin_offset_y))
+
+def plot_whisking_geometry_summary(cwe, ccs, Htips, color2whisker, 
+    normalized_es, normalized_es_left, normalized_es_right,
+    frame_width, frame_height, half_bin_offset_x, half_bin_offset_y, 
+    n_points=1000):
+    """Plot various summary figures about the geometry of the session
+    
+    1x5 array of subplots
+    * Position of all whisker tips, colored by identity
+    * Edge summary and position of all whisker contacts, colored by whisker
+    * Edge summary and position of all whisker contacts, colored by rewside
+    * Edge summary colored by rewside
+    * Overall: tip locations in black; contact locations colored by whisker;
+      follicle location colored by whisker; edge summary in black    
+    """
+    ## Plot
+    f, axa = plt.subplots(1, 5, figsize=(18, 4))
+    f.subplots_adjust(left=.05, right=.95)
+    
+    # First plot: tips colored by whisker
+    whiskvid.plotting.plot_whisker_ends_as_points(cwe, 
+        color2whisker=color2whisker, 
+        typ='tip', ax=axa[0], n_points=1000)
+    axa[0].set_title('tips')
+    
+    # Second plot: contacts colored by whisker
+    whiskvid.plotting.plot_contact_locations_by_whisker(ccs, 
+        color2whisker=color2whisker, 
+        ax=axa[1])
+    whiskvid.plotting.plot_transparent_histogram(normalized_es, ax=axa[1],
+        frame_width=frame_width, frame_height=frame_height,)
+    axa[1].set_title('contacts by whisker')
+    
+    # Third plot: contacts colored by rewside
+    whiskvid.plotting.plot_contact_locations_by_rewside(ccs, ax=axa[2])
+    whiskvid.plotting.plot_transparent_histogram(normalized_es, ax=axa[2],
+        frame_width=frame_width, frame_height=frame_height,)    
+    axa[2].set_title('contacts by rewside')
+    
+    # Fourth plot: edge summary colored by rewside
+    whiskvid.plotting.plot_transparent_histogram(normalized_es_left, ax=axa[3],
+        frame_width=frame_width, frame_height=frame_height,
+        cmap=plt.cm.Blues, upper_prctile_clim=90)
+    whiskvid.plotting.plot_transparent_histogram(normalized_es_right, ax=axa[3],
+        frame_width=frame_width, frame_height=frame_height,
+        cmap=plt.cm.Reds, upper_prctile_clim=90)
+    axa[3].set_title('edge summary by rewside')
+    
+    ## Fifth plot: all geometry together
+    # Plot one black histogram for all whisker tips
+    axa[4].set_title('overall geometry')
+    whiskvid.plotting.plot_transparent_histogram(Htips.mean(axis=0), ax=axa[4], 
+        frame_width=frame_width, frame_height=frame_height)
+    whiskvid.plotting.plot_whisker_ends_as_points(cwe, 
+        color2whisker=color2whisker, 
+        typ='fol', ax=axa[4])
+    whiskvid.plotting.plot_contact_locations_by_whisker(ccs, 
+        color2whisker=color2whisker, ax=axa[4])
+    whiskvid.plotting.plot_transparent_histogram(normalized_es, ax=axa[4],
+        frame_width=frame_width, frame_height=frame_height,)
+    
+    # Pretty
+    for ax in axa:
+        whiskvid.plotting.set_axis_for_image(ax, 
+            frame_width=frame_width, frame_height=frame_height,
+            half_bin_offset_x=half_bin_offset_x,
+            half_bin_offset_y=half_bin_offset_y,
+        )
+    
+    return f
+    f.savefig('summary_figure_%s.png' % session_name)
