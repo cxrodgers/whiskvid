@@ -306,7 +306,7 @@ class VideoSession(object):
         video_file = self.data.monitor_video.get_path
         
         # Sync it
-        res = MCwatch.behavior.syncing.sync_video_with_behavior(
+        sync_res = MCwatch.behavior.syncing.sync_video_with_behavior(
             bfile=bfile,
             lums=None, 
             video_file=video_file, 
@@ -315,8 +315,14 @@ class VideoSession(object):
             refrac=refrac, 
             assumed_fps=30.,
             error_if_no_fit=True,
-            verbose=verbose
+            verbose=verbose,
+            return_all_data=True,
         )
+        res = sync_res['b2v_fit']
+        lums = sync_res['lums']
+        
+        # Hack: save the lums to disk here, for debugging
+        np.save(os.path.join(self._session_directory, 'lums'), lums)
         
         # Set sync
         self._django_object.fit_b2v0 = res[0]
