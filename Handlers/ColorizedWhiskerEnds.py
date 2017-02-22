@@ -216,6 +216,9 @@ def calculate_histogram_tips_over_whiskers(cwe, color2whisker, **kwargs):
         color_groups.append(color)
         whisker_labels.append(whisker)
     
+    if len(H_tip_l) == 0:
+        raise ValueError("no whiskers provided in color2whisker")
+    
     return (np.asarray(H_tip_l), color_groups, whisker_labels, 
         col_edges, row_edges)
 
