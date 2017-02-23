@@ -305,10 +305,19 @@ class VideoSession(object):
         # Monitor video
         video_file = self.data.monitor_video.get_path
         
+        # Try to load lums
+        # See below hack
+        # This should be a Handler
+        lums_filename = os.path.join(self._session_directory, 'lums')
+        if os.path.exists(lums_filename + '.npy'):
+            lums = np.load(lums_filename + '.npy')
+        else:
+            lums = None
+        
         # Sync it
         sync_res = MCwatch.behavior.syncing.sync_video_with_behavior(
             bfile=bfile,
-            lums=None, 
+            lums=lums, 
             video_file=video_file, 
             light_delta=light_delta,
             diffsize=diffsize, 
@@ -322,9 +331,15 @@ class VideoSession(object):
         lums = sync_res['lums']
         
         # Hack: save the lums to disk here, for debugging
-        np.save(os.path.join(self._session_directory, 'lums'), lums)
+        np.save(lums_filename, lums)
         
-        # Set sync
+        ## Check for syncing problems
+        first_bad_trial, max_good_vtime = identify_sync_problems(sync_res)
+        if first_bad_trial is not None:
+            print "Warning: sync failed"
+            print "First bad trial: %d" % first_bad_trial
+        
+        ## Set sync
         self._django_object.fit_b2v0 = res[0]
         self._django_object.fit_b2v1 = res[1]
 
@@ -334,6 +349,69 @@ class VideoSession(object):
     
         # Save to db
         self._django_object.save()
+
+def identify_sync_problems(sync_res):
+    """Function to identify major syncing issues, eg camera reboot
+    
+    sync_res : result of MCwatch.behavior.syncing.sync_video_with_behavior
+    
+    Identifies which trials are off by more than 20 ms
+    Right now this can only handle the case where all the trials are good,
+    or the camera fails after the midpoint and the later trials are bad
+    
+    Returns : first_bad_trial, max_good_vtime
+        These are both None if there is no problem.
+    """
+    ## Identify sync problems
+    b2v_fit = sync_res['b2v_fit']
+    lums = sync_res['lums']
+    video_flash_x = sync_res['video_flash_x']
+    behavior_flash_y = sync_res['behavior_flash_y']
+
+    # Do the matching to identify where in the video the sync fails (if anywhere)
+    # This is the index of the first btrial in the video.
+    # If this is negative then there are extra flashes in the video (e.g., from
+    # another session.)
+    b_trial_start = sync_res['y_start'] - sync_res['x_start']
+    assert b_trial_start >= 0
+
+    # The last btrial might be nan, but nothing else should be
+    last_btrial_is_nan = np.isnan(behavior_flash_y[-1])
+    if last_btrial_is_nan:
+        assert not np.any(np.isnan(behavior_flash_y[:-1]))
+    else:
+        assert not np.any(np.isnan(behavior_flash_y))
+
+    # Match the trials and fit
+    # Really should refit here, in case not all the data was used originally
+    # Because longest_unique_fit adds trials symetrically at beginning and end
+    btimes_matched = behavior_flash_y[b_trial_start:b_trial_start + len(video_flash_x)]
+    btimes_matched_vbase = np.polyval(sync_res['b2v_fit'], btimes_matched)
+    residuals = btimes_matched_vbase - video_flash_x
+
+    # Convert residuals to real seconds, not spurious timebase
+    residuals = residuals / sync_res['b2v_fit'][0]
+
+    # Identify the bad trials
+    # 20 ms errors are not uncommon!
+    bad_trials = np.abs(residuals) > .02
+
+    # The only cases that are handled right now are:
+    # All trials good
+    # Trials good until some point, then all trials bad afterward (camera reboot)
+    if np.all(~bad_trials):
+        # all trials good
+        first_bad_trial = None
+        max_good_vtime = None
+    else:
+        # camera reboot after the midpoint
+        first_bad_trial = np.where(bad_trials)[0][0]
+        assert np.all(bad_trials[first_bad_trial:])
+        
+        # the maximum good time is the last good trial start
+        max_good_vtime = btimes_matched_vbase[first_bad_trial-1]        
+    
+    return first_bad_trial, max_good_vtime
 
 class NeuralSession(object):
     """Interface to all of the data about a neural session.
