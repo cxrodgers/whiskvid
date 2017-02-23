@@ -1202,7 +1202,9 @@ def bin_ccs(ccs, locking_times, trial_labels,
             folded, bins=bins, meth=meth)
         
         # Label rate
-        binned_rate = binned.rate#.astype(np.int)
+        # Because we're folding by trial, # trials is always 1
+        # This will be int if meth is np.histogram
+        binned_rate = binned.counts
         binned_rate.index = binned.t
         binned_rate.index.name = 'time'
         binned_rate.columns.name = 'trial'
@@ -1224,11 +1226,15 @@ def bin_ccs(ccs, locking_times, trial_labels,
         # Need to shift stops so that contacts wholly contained in one bin
         # will still show up
         touching = (binned_starts_rate.cumsum() - 
-            binned_stops_rate.cumsum().shift().fillna(0))#.astype(np.int))
+            binned_stops_rate.cumsum().shift().fillna(0))
         
         # This would fail if a touch was already in progress at the
         # beginning of the window because it might go negative
         assert (touching >= -1e-10).values.all()
+        
+        # Convert back to int (the shift converts to float)
+        if meth is np.histogram:
+            touching = touching.astype(np.int)
 
         # Store
         starts_l.append(binned_starts_rate)
