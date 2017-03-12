@@ -36,6 +36,9 @@ class AllEdgesHandler(CalculationHandler):
     
     On every frame, we calculate and store the edge of the shape.
     
+    The data is stored as a Nx2 array, with row coordinates (Y) in the
+    first column and column coordinates (X) in the second column.
+    
     load_data : Data is stored and loaded using numpy.load
     choose_manual_params : 
         The following manual params are required:
