@@ -76,7 +76,8 @@ def plot_contact_locations_by_rewside(ccs, ax, **kwargs):
             **plot_kwargs)
 
 def plot_whisker_ends_as_points(cwe, color2whisker, ax, typ='tip',
-    whisker_color_order=None, n_points=100, **kwargs):
+    whisker_color_order=None, n_points=100, 
+    scale_axes=True, frame_height=None, frame_width=None, **kwargs):
     """Plot a subset of tip or follicles as colored points
     
     typ: 'tip' or 'fol'
@@ -98,6 +99,15 @@ def plot_whisker_ends_as_points(cwe, color2whisker, ax, typ='tip',
             my.misc.take_equally_spaced(sub_cwe[typ + '_y'], n_points),
             color=color_s, **plot_kwargs
         )    
+    
+    if scale_axes:
+        ax.axis('scaled')
+    
+    if frame_height is not None:
+        ax.set_ylim((frame_height, 0))
+    
+    if frame_width is not None:
+        ax.set_xlim((0, frame_width))
 
 def set_axis_for_image(ax, frame_width, frame_height,
     half_bin_offset_x=None, half_bin_offset_y=None):
