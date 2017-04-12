@@ -174,7 +174,7 @@ def calculate_histogram_tips(sub_cwe, row_edges=None, col_edges=None,
     
     # Histogram tip
     H, col_edges, row_edges = np.histogram2d(
-        x=sub_cwe.tip_x, y=sub_cwe.tip_y,
+        x=sub_cwe.tip_x.values, y=sub_cwe.tip_y.values,
         bins=[col_edges, row_edges],
         normed=True,
     )
