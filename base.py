@@ -41,7 +41,41 @@ WHISKER_COLOR_ORDER_W = [
 WHISKER_COLOR_ORDER_K = [
     'k', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
 
+## loading functions for raw .whiskers and .measurements files
+def load_measurements(measure_file):
+    """Load measurements, such as curvature.
+    
+    The data is taken from traj.MeasurementsTable
+    I had to guess at what the columns mean, based on example code in
+    features() in python/summary.py
+    
+    0 - "smask"?
+    1 - frame
+    2 - wid
+    3 - path_length
+    4 - median_score
+    5 - angle
+    6 - curvature
+    7, 8 - follicle x and y
+    9, 10 - tip x and y
+    
+    measure_file : string
+        Path to *.measurements file from measure
+    
+    Returns: DataFrame
+        Has one row for each whisker segment.
+        Columns: smask, frame, wid, path_length, score, 
+            angle, curv, fol_x, fol_y, tip_x, tip_y        
+    """
+    tmt = traj.MeasurementsTable(measure_file)
+    tmt_arr = tmt.asarray()
+    tmtdf = pandas.DataFrame(tmt_arr,
+        columns=['smask', 'frame', 'wid', 'path_length', 'score',
+            'angle', 'curv', 'fol_x', 'fol_y', 'tip_x', 'tip_y'])
+    for col in ['frame', 'wid']:
+        tmtdf[col] = tmtdf[col].astype(np.int)
 
+    return tmtdf
 
 ## Begin stuff for putting whisker data into HDF5
 try:
