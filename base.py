@@ -43,65 +43,6 @@ WHISKER_COLOR_ORDER_K = [
 
 
 
-def angle_meth1(wsx, wsy, side):
-    """Fit angle by lstsqs line fit, then arctan, then pin.
-    
-    This will fail for slopes close to vertical.
-    """
-    # fit a line and calculate angle of whisker
-    # in the video, (0, 0) is upper left, so we need to take negative of slope
-    # This will fail for slopes close to vertical, for instance if it
-    # has this shape: (  because least-squares fails here
-    # eg Frame 5328 in 0509A_cropped_truncated_4
-    p = np.polyfit(wsx, wsy, deg=1)
-    slope = -p[0]
-
-    # Arctan gives values between -90 and 90
-    # Basically, we cannot discriminate a SSW whisker from a NNE whisker
-    # Can't simply use diff_x because the endpoints can be noisy
-    # Similar problem occurs with ESE and WNW, and then diff_y is noisy
-    # Easiest way to do it is just pin the data to a known range
-    angle = np.arctan(slope) * 180 / np.pi    
-    
-    # pin
-    pinned_angle = pin_angle(angle, side)
-    
-    return pinned_angle
-
-def angle_meth2(wsx, wsy, side):
-    """Fit angle by arctan of tip vs follicle, then pin"""
-    # Separate angle measurement: tip vs follicle
-    # This will be noisier
-    # Remember to flip up/down here
-    # Also remember that ws.x and ws.y go from tip to follicle (I think?)
-    # Actually the go from tip to follicle in one video and from follicle
-    # to tip in the other; and then occasional exceptions on individual frames
-    angle = np.arctan2(
-        -(wsy[0] - wsy[-1]), wsx[0] - wsx[-1]) * 180 / np.pi
-
-    # On rare occasions it seems to be flipped, 
-    # eg Frame 9 in 0509A_cropped_truncated_4
-    # So apply the same fix, even though it shouldn't be necessary here
-    # pin
-    pinned_angle = pin_angle(angle, side)
-    
-    return pinned_angle    
-
-def pin_angle(angle, side):
-    """Pins angle to normal range, based on side"""
-    # side = left, so theta ~-90 to +90
-    # side = top, so theta ~ -180 to 0    
-    
-    if side == 'top':
-        if angle > 0:
-            return angle - 180
-    elif side == 'left':
-        if angle > 90:
-            return angle - 180
-    return angle
-    
-
-
 ## Begin stuff for putting whisker data into HDF5
 try:
     class WhiskerSeg(tables.IsDescription):
