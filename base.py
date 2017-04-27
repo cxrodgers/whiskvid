@@ -49,7 +49,14 @@ def load_measurements(measure_file):
     I had to guess at what the columns mean, based on example code in
     features() in python/summary.py
     
-    0 - "smask"?
+    The ordering of the result does not seem to match the ordering derived
+    from *.whiskers. I suspect too-small whiskers are being moved after good
+    whiskers. You must use 'frame' and 'wid' to line up with other data. 
+    For this reason I set the index to be 'frame' and 'wid' in this function.
+    
+    0 - "smask"? I think this may be a mask that is applied to filter out
+        whiskers that are too small. This seems to affect the ordering of
+        the results as well (good whiskers moved before bad).
     1 - frame
     2 - wid
     3 - path_length
@@ -66,6 +73,7 @@ def load_measurements(measure_file):
         Has one row for each whisker segment.
         Columns: smask, frame, wid, path_length, score, 
             angle, curv, fol_x, fol_y, tip_x, tip_y        
+        Then ['frame', 'wid'] are set to be the index (see above)
     """
     tmt = traj.MeasurementsTable(measure_file)
     tmt_arr = tmt.asarray()
@@ -74,6 +82,9 @@ def load_measurements(measure_file):
             'angle', 'curv', 'fol_x', 'fol_y', 'tip_x', 'tip_y'])
     for col in ['frame', 'wid']:
         tmtdf[col] = tmtdf[col].astype(np.int)
+    
+    tmtdf = tmtdf.set_index(['frame', 'wid'], verify_integrity=True).sort_index()
+    
 
     return tmtdf
 
