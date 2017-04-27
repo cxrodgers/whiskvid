@@ -22,12 +22,10 @@ except ImportError:
     pass
 import numpy as np, pandas
 import os
-import scipy.ndimage
 import my
 import ArduFSM
 import MCwatch.behavior
 import whiskvid
-import WhiskiWrap
 import matplotlib.pyplot as plt
 import pandas
 import kkpandas
@@ -42,6 +40,8 @@ WHISKER_COLOR_ORDER_W = [
     'white', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
 WHISKER_COLOR_ORDER_K = [
     'k', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
+
+
 
 def angle_meth1(wsx, wsy, side):
     """Fit angle by lstsqs line fit, then arctan, then pin.
@@ -100,79 +100,6 @@ def pin_angle(angle, side):
             return angle - 180
     return angle
     
-def assign_tip_and_follicle(x0, x1, y0, y1, side=None):
-    """Decide which end is the tip.
-    
-    The side of the screen that is closest to the face is used to determine
-    the follicle. For example, if the face is along the left, then the
-    left-most end is the follicle.
-    
-    We assume (0, 0) is in the upper left corner, and so "top" means that
-    the face lies near row zero.
-    
-    Returns: fol_x, tip_x, fol_y, tip_y
-        If side is None, return x0, x1, y0, y1
-    """
-    if side is None:
-        return x0, x1, y0, y1
-    elif side in ['left', 'right', 'top', 'bottom']:
-        # Is it correctly oriented, ie, 0 is fol and 1 is tip
-        is_correct = (
-            (side == 'left' and x0 < x1) or 
-            (side == 'right' and x1 < x0) or 
-            (side == 'top' and y0 < y1) or 
-            (side == 'bottom' and y1 < y0))
-        
-        # Return normal or swapped
-        if is_correct:
-            return x0, x1, y0, y1
-        else:
-            return x1, x0, y1, y0
-    else:
-        raise ValueError("unknown value for side: %s" % side)
-
-def get_whisker_ends(whisk_file=None, frame2segment_id2whisker_seg=None,
-    side=None, also_calculate_length=True):
-    """Returns dataframe with both ends of every whisker
-    
-    Provide either whisk_file or frame2segment_id2whisker_seg
-    side : used to determine which end is which
-    
-    Returns a DataFrame with columns:
-        'fol_x', 'fol_y', 'frame', 'seg', 'tip_x', 'tip_y', 'length'
-    """
-    # Load traces
-    if frame2segment_id2whisker_seg is None:
-        frame2segment_id2whisker_seg = load_whisker_traces(whisk_file)
-    
-    # Get tips and follicles
-    res_l = []
-    for frame, segment_id2whisker_seg in frame2segment_id2whisker_seg.items():
-        for segment_id, whisker_seg in segment_id2whisker_seg.items():
-            # Get x and y of both ends
-            x0, x1 = whisker_seg.x[[0, -1]]
-            y0, y1 = whisker_seg.y[[0, -1]]
-            
-            # Pin
-            fol_x, tip_x, fol_y, tip_y = assign_tip_and_follicle(x0, x1, y0, y1, 
-                side=side)
-            
-            # Stores
-            res_l.append({
-                'frame': frame, 'seg': segment_id,
-                'tip_x': tip_x, 'tip_y': tip_y,
-                'fol_x': fol_x, 'fol_y': fol_y})
-
-    # DataFrame
-    resdf = pandas.DataFrame.from_records(res_l)
-
-    # length
-    if also_calculate_length:
-        resdf['length'] = np.sqrt(
-            (resdf['tip_y'] - resdf['fol_y']) ** 2 + 
-            (resdf['tip_x'] - resdf['fol_x']) ** 2)
-    
-    return resdf
 
 
 ## Begin stuff for putting whisker data into HDF5
@@ -285,124 +212,6 @@ def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
 
     h5file.close()    
 
-## tracing
-def trace_session(session, db=None, create_monitor_video=False, 
-    chunk_size=200, stop_after_frame=None, n_trace_processes=8,
-    monitor_video_kwargs=None):
-    """Runs trace on session using WhiskiWrap.
-    
-    Currently this only works on modulated mat files.
-    It first writes them out as tiffs to trace
-        trace_write_chunked_tiffs_nodb
-        Optionally at this point a monitor video can also be created.
-    And then traces them
-        trace_session_nodb
-    If tiffs_to_trace directory already exists, the first step is skipped.
-    
-    session : name of session to trace
-    create_monitor_video : Whether to create a monitor video
-        This could be useful for subsequent analysis (eg, shapes)
-    monitor_video_kwargs : dict of kwargs for trace_write_chunked_tiffs_nodb
-        Default: {'vcodec': 'libx264', 'qp': 15}
-        For lossless, use {'vcodec': 'libx264', 'qp': 0}
-
-    chunk_size, stop_after_frame : passed to trace_write_chunked_tiffs_nodb
-    
-    """
-    if db is None:
-        db = whiskvid.db.load_db()
-
-    # Extract some info from the db
-    whisker_session_directory = db.loc[session, 'session_dir']
-    
-    # Error check that matfile_directory exists
-    # Later rewrite this to run on raw videos too
-    if pandas.isnull(db.loc[session, 'matfile_directory']):
-        raise ValueError("trace only supports matfile directory for now")
-
-    # Store the wseg_h5_fn in the db if necessary
-    if pandas.isnull(db.loc[session, 'wseg_h5']):
-        # Create a wseg h5 filename
-        db.loc[session, 'wseg_h5'] = whiskvid.db.WhiskersHDF5.generate_name(
-            whisker_session_directory)
-        
-        # Save right away, to avoid stale db
-        whiskvid.db.save_db(db)  
-
-    # Run the trace if the file doesn't exist
-    if not os.path.exists(db.loc[session, 'wseg_h5']):
-        # Where to put tiff stacks and timestamps and monitor video
-        tiffs_to_trace_directory = os.path.join(whisker_session_directory, 
-            'tiffs_to_trace')
-        timestamps_filename = os.path.join(whisker_session_directory, 
-            'tiff_timestamps.npy')
-        if create_monitor_video:
-            monitor_video = os.path.join(whisker_session_directory,
-                session + '.mkv')
-            if monitor_video_kwargs is None:
-                monitor_video_kwargs = {'vcodec': 'libx264', 'qp': 21}
-        else:
-            monitor_video = None
-            monitor_video_kwargs = {}
-        
-        # Skip writing tiffs if the directory already exists
-        # This is a bit of a hack because tiffs_to_trace is not in the db
-        if not os.path.exists(tiffs_to_trace_directory):
-            # Create the directory and run trace_write_chunked_tiffs_nodb
-            os.mkdir(tiffs_to_trace_directory)
-            frame_width, frame_height = trace_write_chunked_tiffs_nodb(
-                matfile_directory=db.loc[session, 'matfile_directory'],
-                tiffs_to_trace_directory=tiffs_to_trace_directory,
-                timestamps_filename=timestamps_filename,
-                monitor_video=monitor_video, 
-                monitor_video_kwargs=monitor_video_kwargs,
-                chunk_size=chunk_size,
-                stop_after_frame=stop_after_frame,
-                )
-            
-            # Store the frame_width and frame_height
-            db = whiskvid.db.load_db()
-            if pandas.isnull(db.loc[session, 'v_width']):
-                db.loc[session, 'v_width'] = frame_width
-                db.loc[session, 'v_height'] = frame_height
-                whiskvid.db.save_db(db)
-        
-        # Tiffs have been written
-        # Now trace the session
-        trace_session_nodb(
-            h5_filename=db.loc[session, 'wseg_h5'],
-            tiffs_to_trace_directory=tiffs_to_trace_directory,
-            n_trace_processes=n_trace_processes,
-            )
-
-def trace_write_chunked_tiffs_nodb(matfile_directory, tiffs_to_trace_directory,
-    timestamps_filename=None, monitor_video=None, monitor_video_kwargs=None,
-    chunk_size=None, stop_after_frame=None):
-    """Generate a PF reader and call WhiskiWrap.write_video_as_chunked_tiffs
-    
-    Returns: frame_width, frame_height
-    """
-    # Generate a PF reader
-    pfr = WhiskiWrap.PFReader(matfile_directory)
-
-    # Write the video
-    ctw = WhiskiWrap.write_video_as_chunked_tiffs(pfr, tiffs_to_trace_directory,
-        chunk_size=chunk_size,
-        stop_after_frame=stop_after_frame, 
-        monitor_video=monitor_video,
-        timestamps_filename=timestamps_filename,
-        monitor_video_kwargs=monitor_video_kwargs)    
-    
-    return pfr.frame_width, pfr.frame_height
-
-def trace_session_nodb(h5_filename, tiffs_to_trace_directory,
-    n_trace_processes=8):
-    """Trace whiskers from input to output"""
-    WhiskiWrap.trace_chunked_tiffs(
-        h5_filename=h5_filename,
-        input_tiff_directory=tiffs_to_trace_directory,
-        n_trace_processes=n_trace_processes,
-        )
 
 ## Overlays
 def make_overlay_image(session, db=None, verbose=True, ax=None):
