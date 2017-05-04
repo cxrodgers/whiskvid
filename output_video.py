@@ -231,6 +231,7 @@ def write_video_with_overlays_from_data(output_filename,
     contact_colors=None,
     also_plot_traces=False, trace_data_x=None, trace_data_y=None,
     trace_data_kwargs=None,
+    ffmpeg_writer_kwargs=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -263,6 +264,7 @@ def write_video_with_overlays_from_data(output_filename,
         actually frame `input_frame_offset` in the source (and thus, in
         the edge_a, contacts_table, etc.). This is the only parameter you
         need to adjust in this case, not frame_triggers or anything else.
+    ffmpeg_writer_kwargs : other parameters for FFmpegWriter
     
     # Other sources of input
     edge_alpha : alpha of edge
@@ -288,6 +290,9 @@ def write_video_with_overlays_from_data(output_filename,
 
     if contact_colors is None:
         contact_colors = my.plot.generate_colorbar(7)
+    
+    if ffmpeg_writer_kwargs is None:
+        ffmpeg_writer_kwargs = {}
 
     ## Set up the graphical handles
     if verbose:
@@ -374,6 +379,7 @@ def write_video_with_overlays_from_data(output_filename,
             output_fps=output_fps,
             pix_fmt='argb',
             write_stderr_to_screen=write_stderr_to_screen,
+            **ffmpeg_writer_kwargs
             )
     else:
         writer = WhiskiWrap.FFmpegWriter(
@@ -383,6 +389,7 @@ def write_video_with_overlays_from_data(output_filename,
             output_fps=output_fps,
             pix_fmt='argb',
             write_stderr_to_screen=write_stderr_to_screen,
+            **ffmpeg_writer_kwargs
             )
     
     ## Loop until input frames exhausted
