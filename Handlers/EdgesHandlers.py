@@ -936,6 +936,28 @@ def filter_edge_summary_by_rewside(edge_summary, rewside):
     
     return es_left
 
+def filter_edge_summary_by_servo_pos(edge_summary, servo_pos_l):
+    """Keep only data for some servo_pos
+    
+    Not a method on load_data because if we want to get left and right we
+    don't want to load twice (too slow)
+    """
+    es_filtered = edge_summary.copy()
+    
+    new_stppos_l, new_srvpos_l, new_reside_l, new_H_l = [], [], [], []
+    for idx, H in enumerate(es_filtered['H_l']):
+        if es_filtered['srvpos_l'][idx] in servo_pos_l:
+            new_stppos_l.append(es_filtered['stppos_l'][idx])
+            new_srvpos_l.append(es_filtered['srvpos_l'][idx])
+            new_reside_l.append(es_filtered['rewside_l'][idx])
+            new_H_l.append(es_filtered['H_l'][idx])
+    es_filtered['H_l'] = new_H_l
+    es_filtered['stppos_l'] = new_stppos_l
+    es_filtered['srvpos_l'] = new_srvpos_l
+    es_filtered['rewside_l'] = new_reside_l
+    
+    return es_filtered
+
 def filter_edge_summary_by_radius(edge_summary, radius='harder'):
     """Keep only data for stppos [50, 150] or [100, 199]
 
