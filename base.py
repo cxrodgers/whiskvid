@@ -40,6 +40,9 @@ WHISKER_COLOR_ORDER_W = [
     'white', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
 WHISKER_COLOR_ORDER_K = [
     'k', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange']
+GLOBAL_WHISKER2COLOR = {
+    'b': 'blue', 'g': 'blue', 'C1': 'green', 'C2': 'red', 'C3': 'cyan',
+    'C4': 'magenta'}
 
 ## loading functions for raw .whiskers and .measurements files
 def load_measurements(measure_file):
