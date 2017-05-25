@@ -232,6 +232,8 @@ def write_video_with_overlays_from_data(output_filename,
     also_plot_traces=False, trace_data_x=None, trace_data_y=None,
     trace_data_kwargs=None,
     ffmpeg_writer_kwargs=None,
+    f=None, ax=None,
+    func_update_figure=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -276,6 +278,8 @@ def write_video_with_overlays_from_data(output_filename,
         number and returns some text to add to the display. This is a 
         "real" frame number after accounting for any offset.
     contact_colors : list of color specs to use
+    func_update_figure : optional, function that takes the frame number
+        as input and updates the figure
     """
     # We need FFmpegWriter
     # Probably that object should be moved to my.video
@@ -298,23 +302,7 @@ def write_video_with_overlays_from_data(output_filename,
     if verbose:
         print "setting up handles"
 
-    if also_plot_traces:
-        # Twice as wide, to make room for the plot
-        figsize = input_width / float(dpi) * 2, input_height / float(dpi)
-        f = plt.figure(frameon=False, dpi=dpi/d_spatial, figsize=figsize)
-        ax = f.add_axes([0, 0, .5, 1])
-        ax.axis('off')
-        
-        # Plot the traces
-        ax_traces = f.add_axes([.55, .05, .4, .9])
-        if trace_data_kwargs is None:
-            trace_data_kwargs = {}
-        ax_traces.plot(trace_data_x, trace_data_y, **trace_data_kwargs)
-        ax_traces.set_ylim((-.001, .001))
-        time_line, = ax_traces.plot([input_frame_offset] * 2, 
-            ax_traces.get_ylim(), 'k')        
-        
-    else:
+    if ax is None:
         # Create a figure with an image that fills it
         # We want the figsize to be in inches, so divide by dpi
         # And we want one invisible axis containing an image that fills the whole figure
@@ -329,7 +317,12 @@ def write_video_with_overlays_from_data(output_filename,
         if \
             input_width / d_spatial != canvas_width or \
             input_height / d_spatial != canvas_height:
-            raise ValueError("canvas size is not the same as input size")
+            raise ValueError("canvas size is not the same as input size")        
+    else:
+        assert f is not None
+        
+        # This is used later in creating the writer
+        canvas_width, canvas_height = f.canvas.get_width_height()
 
     # Plot typical edge images as static alpha
     if typical_edges_hist2d is not None:
@@ -370,27 +363,15 @@ def write_video_with_overlays_from_data(output_filename,
     whisker_handles = []
     
     # Create the writer
-    if also_plot_traces:
-        # Exactly twice as wide, to make room for the plot
-        writer = WhiskiWrap.FFmpegWriter(
-            output_filename=output_filename,
-            frame_width=input_width/d_spatial * 2,
-            frame_height=input_height/d_spatial,
-            output_fps=output_fps,
-            pix_fmt='argb',
-            write_stderr_to_screen=write_stderr_to_screen,
-            **ffmpeg_writer_kwargs
-            )
-    else:
-        writer = WhiskiWrap.FFmpegWriter(
-            output_filename=output_filename,
-            frame_width=input_width/d_spatial,
-            frame_height=input_height/d_spatial,
-            output_fps=output_fps,
-            pix_fmt='argb',
-            write_stderr_to_screen=write_stderr_to_screen,
-            **ffmpeg_writer_kwargs
-            )
+    writer = WhiskiWrap.FFmpegWriter(
+        output_filename=output_filename,
+        frame_width=canvas_width,
+        frame_height=canvas_height,
+        output_fps=output_fps,
+        pix_fmt='argb',
+        write_stderr_to_screen=write_stderr_to_screen,
+        **ffmpeg_writer_kwargs
+        )
     
     ## Loop until input frames exhausted
     for nnframe, frame in enumerate(input_reader.iter_frames()):
@@ -433,9 +414,8 @@ def write_video_with_overlays_from_data(output_filename,
             im2, edge_a_obj, contact_positions_l,
             d_spatial, d_temporal, contact_colors)
         
-        if also_plot_traces:
-            ax_traces.set_xlim((nframe - 200, nframe + 200))
-            time_line.set_xdata([nframe] * 2)
+        if func_update_figure is not None:
+            func_update_figure(nframe)
         
         # Write to pipe
         f.canvas.draw()
@@ -461,7 +441,7 @@ def plot_stills_with_overlays_from_data(
     contact_colors=None,
     force_contact_color=6,
     frame_clim=None, axa=None,
-    contact_ms=15,
+    contact_ms=15, edge_hist_kwargs=None,
     **kwargs):
     """Clone of write_video_with_overlays_from_data for still images.
     
@@ -528,12 +508,6 @@ def plot_stills_with_overlays_from_data(
         frame, stdout, stderr = my.video.get_frame(monitor_video_filename, 
             frame_number=frame_trigger)
         
-        # Plot typical edge images as static alpha
-        if typical_edges_hist2d is not None:
-            im1 = my.plot.imshow(typical_edges_hist2d, ax=ax, axis_call='image',
-                extent=(0, input_width, input_height, 0), cmap=plt.cm.gray)
-            im1.set_alpha(edge_alpha)
-        
         # Plot input video frames
         in_image = np.zeros((input_height, input_width))
         im2 = my.plot.imshow(in_image, ax=ax, 
@@ -546,6 +520,16 @@ def plot_stills_with_overlays_from_data(
             im2.set_clim((0, 255))
         else:
             im2.set_clim(frame_clim)
+
+        # Plot typical edge images as static alpha
+        if typical_edges_hist2d is not None:
+            if edge_hist_kwargs is None:
+                edge_hist_kwargs = {}
+            im1 = whiskvid.plotting.plot_transparent_histogram(
+                typical_edges_hist2d, ax=ax, 
+                frame_width=input_width, frame_height=input_height,
+                **edge_hist_kwargs
+            )
 
         # Plot contact positions dynamically
         if contacts_table is not None:
