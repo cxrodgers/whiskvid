@@ -28,7 +28,10 @@ import MCwatch.behavior
 import whiskvid
 import matplotlib.pyplot as plt
 import pandas
-import kkpandas
+try:
+    import kkpandas
+except ImportError:
+    pass
 
 try:
     import tables
