@@ -19,6 +19,8 @@ import my.misc
 root_directory_search_list = [
     '/mnt/fast/data/whisker/processed',
     '/home/chris/whisker_video',
+    '/home/jason/whisker',
+    '/home/jason/mnt/nas2_public/public_whisker',
     os.path.expanduser('~/mnt/nas2_home/whisker/processed'),
 ]
 neural_root_directory_search_list = [
