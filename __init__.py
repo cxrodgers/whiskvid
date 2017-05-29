@@ -26,7 +26,7 @@ import sys
 import django
 
 ## Load the interface with the django database
-def setup_django():
+def _setup_django():
     """Imports django settings from mouse2 project
     
     http://stackoverflow.com/questions/8047204/django-script-to-access-model-objects-without-using-manage-py-shell
@@ -56,12 +56,18 @@ def setup_django():
     # Setup django
     django.setup()
 
-setup_django()
+try:
+    _setup_django()
+except ImportError:
+    # this happens if mouse-cloud doesn't exist at the expected pat
+    pass
 
 # Now we can import the django modules
-import whisk_video
-import django_db
-
+try:
+    import whisk_video
+    import django_db
+except ImportError:
+    pass
 
 # Import whiski files from where they live.
 # This will trigger a load of default.parameters, always in the directory
