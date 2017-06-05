@@ -25,6 +25,7 @@ import os
 import my
 import ArduFSM
 import MCwatch.behavior
+from kalman.kalman_classes import *
 import whiskvid
 import matplotlib.pyplot as plt
 import pandas
@@ -467,6 +468,111 @@ def logreg_perf_vs_contacts(session):
 ##
 
 
+# ## for classifying whiskers
+# def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
+#     fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150,
+#     subsample_frame=1, rank_foly_ascending=True,
+#     oof_y_thresh=5, oof_y_bonus=200):
+#     """Classify the whiskers by their position on the face
+    
+#     oof_y_thresh : whiskers with a tip_y greater than this will have
+#         oof_y_bonus added to their length
+#     rank_foly_ascending : if True, the lowest color is given to the
+#         larget fol_y (nearest top of frame)
+    
+#     First we apply two length thresholds (one for posterior and one
+#     for anterior). Then we rank the remaining whisker objects in each
+#     frame from back to front. 
+    
+#     mwe is returned with a new column 'color_group' with these ranks.
+#     0 means that the whisker is not in a group.
+#     1 is the one with minimal y-coordinate.
+#     Ranks greater than max_whiskers are set to 0.
+    
+#     Debug plots:
+#     bins = np.arange(orig_mwe.fol_y.min(), orig_mwe.fol_y.max(), 1)
+#     f, ax = plt.subplots()
+#     for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+#         ax.hist(submwe.fol_y.values, bins=bins, histtype='step')
+
+#     bins = np.arange(orig_mwe.pixlen.min(), orig_mwe.pixlen.max(), 1)
+#     f, ax = plt.subplots()
+#     for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+#         ax.hist(submwe.pixlen.values, bins=bins, histtype='step')
+    
+#     f, ax = plt.subplots()
+#     for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
+#         ax.plot(submwe.angle.values, submwe.fol_y.values, ',')    
+#     """
+#     print "copying data"
+#     # Make changes to the copy to avoid SettingWithCopyWarning
+#     mwe_copy = mwe.copy()
+
+#     # Out of frame bonus
+#     mwe_copy.loc[mwe_copy.tip_y < oof_y_thresh, 'pixlen'] += oof_y_bonus
+
+#     # Apply various thresholds
+#     # Make a second copy here
+#     mwe_copy2 = mwe_copy[
+#         ((mwe_copy.pixlen >= long_pixlen_thresh) & 
+#             (mwe_copy.fol_y < fol_y_cutoff)) | 
+#         ((mwe_copy.pixlen >= short_pixlen_thresh) & 
+#             (mwe_copy.fol_y >= fol_y_cutoff))
+#     ].copy()
+
+#     # Subsample to save time
+#     mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
+
+#     # Argsort each frame
+#     print "sorting whiskers in order"
+    
+#     # No need to add 1 because rank starts with 1
+#     mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(
+#         lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
+
+#     # Anything beyond C4 is not real
+#     mwe_copy2.loc[mwe_copy2['ordinal'] > max_whiskers, 'ordinal'] = 0
+
+#     # Store the results in the first copy
+#     mwe_copy['color_group'] = 0
+#     mwe_copy.loc[mwe_copy2.index, 'color_group'] = \
+#         mwe_copy2['ordinal'].astype(np.int)
+    
+#     return mwe_copy
+
+def create_sensor_functions(L):
+  def sensor_function(state):
+    theta = state[0][0]
+    return np.array([[L * np.cos(theta), L * np.sin(theta)]]).T
+  def sensor_function_jacobian(state):
+    theta = state[0][0]
+    return np.array([
+      [-L * np.sin(theta), 0],
+      [L * np.cos(theta), 0],
+    ])
+
+  return sensor_function, sensor_function_jacobian
+
+def create_state_functions(dt, period):
+  def state_function(state):
+    theta = state[0]
+    omega = state[1]
+    theta_new = theta + omega * dt
+
+
+    omega_new = omega + (-1 * (2 * np.pi / period) ** 2) * dt * theta
+
+    return np.array([[theta_new, omega_new]]).T
+  def state_function_jacobian(state):
+    A = np.array([
+      [1,       dt], 
+      [(-1 * (2 * np.pi / period) ** 2) * dt, 1 ],
+    ])
+    return A
+
+  return state_function, state_function_jacobian
+
+
 ## for classifying whiskers
 def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     fol_y_cutoff=400, short_pixlen_thresh=55, long_pixlen_thresh=150,
@@ -510,32 +616,97 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     # Out of frame bonus
     mwe_copy.loc[mwe_copy.tip_y < oof_y_thresh, 'pixlen'] += oof_y_bonus
 
-    # Apply various thresholds
-    # Make a second copy here
-    mwe_copy2 = mwe_copy[
-        ((mwe_copy.pixlen >= long_pixlen_thresh) & 
-            (mwe_copy.fol_y < fol_y_cutoff)) | 
-        ((mwe_copy.pixlen >= short_pixlen_thresh) & 
-            (mwe_copy.fol_y >= fol_y_cutoff))
-    ].copy()
+    P0 = np.eye(2) * 10
+    Q = np.array([
+        [0.1, 0],
+        [0, 0.1],
+      ])
+    R = np.eye(2) * 0.1
 
-    # Subsample to save time
-    mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
+    tracker = KalmanTracker(
+        P0=P0, Q=Q, R=R,
+        state_factory=create_state_functions, sensor_factory=create_sensor_functions,
+    )
+    #Use frames as timepoints
 
-    # Argsort each frame
-    print "sorting whiskers in order"
+
+
     
-    # No need to add 1 because rank starts with 1
-    mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(
-        lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
+    mwe_copy['ordinal'] = 0
 
-    # Anything beyond C4 is not real
-    mwe_copy2.loc[mwe_copy2['ordinal'] > max_whiskers, 'ordinal'] = 0
+    frames = max(mwe_copy.frame)
+    dt = 30 ** -1
 
-    # Store the results in the first copy
-    mwe_copy['color_group'] = 0
-    mwe_copy.loc[mwe_copy2.index, 'color_group'] = \
-        mwe_copy2['ordinal'].astype(np.int)
+    print "Moving through frames and classifying"
+    for i in range(15, frames):
+        observations_in_frame = mwe[(mwe.frame == i + 1) & (mwe.pixlen > long_pixlen_thresh)].nlargest(3, 'pixlen')
+        observations_in_prev_frame = mwe[(mwe.frame == i + 1 -15) & (mwe.pixlen > long_pixlen_thresh)].nlargest(3, 'pixlen')
+        # observations_in_frame = mwe[(mwe.frame == i + 1) ]
+        # observations_in_prev_frame = mwe[(mwe.frame == i + 1 -15) & (mwe.pixlen > 45)]
+        indices = observations_in_frame.index.values
+        prev_indices = observations_in_prev_frame.index.values
+
+        observation_dicts = []
+        for j, o in observations_in_frame.iterrows():
+            #angular frequency (omega) is set in an arbitrary way
+            omega = (mwe_copy.loc[indices, 'angle'].mean() - mwe_copy.loc[prev_indices, 'angle'].mean()) / (15 * dt)
+            theta, omega = o.angle * np.pi / 180, omega * np.pi / 180
+            length, xtip, ytip = o.pixlen, o.tip_x, o.tip_y
+
+            x0 = np.array([[theta, omega]]).T
+            z = np.array([[length * np.cos(theta), length * np.sin(theta)]]).T
+
+            sensor_factory_args = [length]
+            #Assume constant period for now
+            state_factory_args = [dt, 5]
+
+            observation_dicts.append({
+                "x" : x0,
+                "z" : z,
+                "sensor_factory_args": sensor_factory_args,
+                "state_factory_args" : state_factory_args,
+            })
+
+        labels = tracker.detect(observation_dicts)
+
+        mwe_copy.loc[indices, 'ordinal'] = labels
+
+        # print  mwe_copy.loc[indices]['ordinal']
+
+    mwe_copy['color_group'] = mwe_copy['ordinal']
+
+
+
+
+
+
+
+    # # Apply various thresholds
+    # # Make a second copy here
+    # mwe_copy2 = mwe_copy[
+    #     ((mwe_copy.pixlen >= long_pixlen_thresh) & 
+    #         (mwe_copy.fol_y < fol_y_cutoff)) | 
+    #     ((mwe_copy.pixlen >= short_pixlen_thresh) & 
+    #         (mwe_copy.fol_y >= fol_y_cutoff))
+    # ].copy()
+
+    # # Subsample to save time
+    # mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
+
+    # # Argsort each frame
+    # print "sorting whiskers in order"
+    
+    # # No need to add 1 because rank starts with 1
+    # mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(
+    #     lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
+
+    # # Anything beyond C4 is not real
+    # mwe_copy2.loc[mwe_copy2['ordinal'] > max_whiskers, 'ordinal'] = 0
+
+    # # Store the results in the first copy
+    # mwe_copy['color_group'] = 0
+    # mwe_copy.loc[mwe_copy2.index, 'color_group'] = \
+    #     mwe_copy2['ordinal'].astype(np.int)
     
     return mwe_copy
 
