@@ -561,6 +561,8 @@ def create_state_functions(dt, period):
 
 
     omega_new = omega + (-1 * (2 * np.pi / period) ** 2) * dt * theta
+    if np.abs(omega_new) > np.pi:
+        omega_new = np.pi
 
     return np.array([[theta_new, omega_new]]).T
   def state_function_jacobian(state):
@@ -633,24 +635,43 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
 
     
     mwe_copy['ordinal'] = 0
+    mwe_filtered = mwe_copy[mwe_copy.pixlen > long_pixlen_thresh].groupby('frame', as_index=False).apply(lambda x: x.nlargest(3, 'pixlen')).groupby('frame', as_index=False)
+    print "filtering whiskers of interest"
 
     frames = max(mwe_copy.frame)
     dt = 30 ** -1
 
+    diffs = mwe_filtered['angle'].apply(lambda x: x.mean()).diff()
+
+    start_frame = 1
+    end_frame = 2
+    initial_direction = diffs[start_frame]
+    while not (np.sign(diffs[end_frame]) == np.sign(initial_direction)):
+        end_frame += 1
+
+    period = dt * (end_frame - start_frame) / 2
+    start_frame, end_frame = end_frame, end_frame + 1
+    initial_direction = diffs[start_frame]
+
+
     print "Moving through frames and classifying"
-    for i in range(15, frames):
-        observations_in_frame = mwe[(mwe.frame == i + 1) & (mwe.pixlen > long_pixlen_thresh)].nlargest(3, 'pixlen')
-        observations_in_prev_frame = mwe[(mwe.frame == i + 1 -15) & (mwe.pixlen > long_pixlen_thresh)].nlargest(3, 'pixlen')
+    for frame, group in mwe_filtered:
+        print frame
+        if frame <= start_frame:
+            continue
+        observations_in_frame = group
         # observations_in_frame = mwe[(mwe.frame == i + 1) ]
         # observations_in_prev_frame = mwe[(mwe.frame == i + 1 -15) & (mwe.pixlen > 45)]
-        indices = observations_in_frame.index.values
-        prev_indices = observations_in_prev_frame.index.values
+        #way to keep track of the original indices
+        indices = [idx[1] for idx in group.index.values]
 
         observation_dicts = []
         for j, o in observations_in_frame.iterrows():
             #angular frequency (omega) is set in an arbitrary way
-            omega = (mwe_copy.loc[indices, 'angle'].mean() - mwe_copy.loc[prev_indices, 'angle'].mean()) / (15 * dt)
+            omega = (diffs[frame]) / dt 
+
             theta, omega = o.angle * np.pi / 180, omega * np.pi / 180
+
             length, xtip, ytip = o.pixlen, o.tip_x, o.tip_y
 
             x0 = np.array([[theta, omega]]).T
@@ -658,7 +679,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
 
             sensor_factory_args = [length]
             #Assume constant period for now
-            state_factory_args = [dt, 5]
+            state_factory_args = [dt, period]
 
             observation_dicts.append({
                 "x" : x0,
@@ -667,9 +688,19 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
                 "state_factory_args" : state_factory_args,
             })
 
+
         labels = tracker.detect(observation_dicts)
 
         mwe_copy.loc[indices, 'ordinal'] = labels
+
+        if not (np.sign(diffs[end_frame]) == np.sign(initial_direction)):
+            period = dt * (end_frame - start_frame) / 2
+            start_frame, end_frame = end_frame, end_frame + 1
+            initial_direction = diffs[start_frame]
+        else:
+            end_frame = frame
+
+
 
         # print  mwe_copy.loc[indices]['ordinal']
 
