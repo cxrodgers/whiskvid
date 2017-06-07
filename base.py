@@ -540,15 +540,19 @@ def logreg_perf_vs_contacts(session):
     
 #     return mwe_copy
 
-def create_sensor_functions(L):
+def create_sensor_functions(L, folx, foly):
   def sensor_function(state):
     theta = state[0][0]
-    return np.array([[L * np.cos(theta), L * np.sin(theta)]]).T
+    return np.array([
+        [L * np.cos(theta), L * np.sin(theta), folx, foly]
+    ]).T
   def sensor_function_jacobian(state):
     theta = state[0][0]
     return np.array([
       [-L * np.sin(theta), 0],
       [L * np.cos(theta), 0],
+      [0, 0],
+      [0, 0],
     ])
 
   return sensor_function, sensor_function_jacobian
@@ -616,71 +620,75 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     mwe_copy = mwe.copy()
 
     # Out of frame bonus
-    mwe_copy.loc[mwe_copy.tip_y < oof_y_thresh, 'pixlen'] += oof_y_bonus
+    # mwe_copy.loc[mwe_copy.tip_y < oof_y_thresh, 'pixlen'] += oof_y_bonus
 
+    # Set of uncertainty matrices for kalman filter
     P0 = np.eye(2) * 10
-    Q = np.array([
-        [0.1, 0],
-        [0, 0.1],
-      ])
-    R = np.eye(2) * 0.1
+    Q = np.eye(2) * 0.1
+    R = np.eye(4) * 0.1
 
+    #Initialize tracker for observed whiskers
     tracker = KalmanTracker(
         P0=P0, Q=Q, R=R,
         state_factory=create_state_functions, sensor_factory=create_sensor_functions,
     )
-    #Use frames as timepoints
 
 
-
-    
     mwe_copy['ordinal'] = 0
-    mwe_filtered = mwe_copy[mwe_copy.pixlen > long_pixlen_thresh].groupby('frame', as_index=False).apply(lambda x: x.nlargest(3, 'pixlen')).groupby('frame', as_index=False)
+    # Group data by frames and limit to largest n whiskers in frame that are above a certain length threshold
     print "filtering whiskers of interest"
+    mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False).apply(lambda x: x.nlargest(10, 'pixlen')).groupby('frame')
 
-    frames = max(mwe_copy.frame)
+    #Use frames as timepoints
     dt = 30 ** -1
 
+    #Find mean angle difference between each frame to guess changes in motion direction
     diffs = mwe_filtered['angle'].apply(lambda x: x.mean()).diff()
 
+    # To estimate the period, find time it takes for change in mean angle to change signs
     start_frame = 1
     end_frame = 2
     initial_direction = diffs[start_frame]
     while not (np.sign(diffs[end_frame]) == np.sign(initial_direction)):
         end_frame += 1
 
-    period = dt * (end_frame - start_frame) / 2
+    period = dt * (end_frame - start_frame) * 2
     start_frame, end_frame = end_frame, end_frame + 1
     initial_direction = diffs[start_frame]
 
 
-    print "Moving through frames and classifying"
-    for frame, group in mwe_filtered:
-        print frame
-        if frame <= start_frame:
+    # Run one iteration of the Kalman Tracker for each frame
+    print "Shifting through frames and classifying"
+    for frame, observations_in_frame in mwe_filtered:
+        if frame == 0:
             continue
-        observations_in_frame = group
-        # observations_in_frame = mwe[(mwe.frame == i + 1) ]
-        # observations_in_prev_frame = mwe[(mwe.frame == i + 1 -15) & (mwe.pixlen > 45)]
-        #way to keep track of the original indices
-        indices = [idx[1] for idx in group.index.values]
+        if frame % 10000 == 0:
+            print frame
+        indices = [idx[1] for idx in observations_in_frame.index.values]
 
         observation_dicts = []
         for j, o in observations_in_frame.iterrows():
-            #angular frequency (omega) is set in an arbitrary way
+
+
+            #angular velocity (omega) is set on a frame to frame basis
             omega = (diffs[frame]) / dt 
 
+            #Pull theta from the observed angle
             theta, omega = o.angle * np.pi / 180, omega * np.pi / 180
 
-            length, xtip, ytip = o.pixlen, o.tip_x, o.tip_y
+
+            length, xtip, ytip, xfol, yfol = o.pixlen, o.tip_x, o.tip_y, o.fol_x, o.fol_y
+
 
             x0 = np.array([[theta, omega]]).T
-            z = np.array([[length * np.cos(theta), length * np.sin(theta)]]).T
+            # z is an array of the x and y coordinates of the tip. Can calculate as shown or use xtip, ytip
+            z = np.array([[length * np.cos(theta), length * np.sin(theta), xfol, yfol]]).T
 
-            sensor_factory_args = [length]
-            #Assume constant period for now
+            #Parameters that will be passed into the Kalman Filter each iteration
+            sensor_factory_args = [length, xfol, yfol]
             state_factory_args = [dt, period]
 
+            #Keep track of observation's features in an organized way for the filter
             observation_dicts.append({
                 "x" : x0,
                 "z" : z,
@@ -689,56 +697,22 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
             })
 
 
+        # Run the filter, and generate labels for each observation 
         labels = tracker.detect(observation_dicts)
 
         mwe_copy.loc[indices, 'ordinal'] = labels
 
-        if not (np.sign(diffs[end_frame]) == np.sign(initial_direction)):
-            period = dt * (end_frame - start_frame) / 2
-            start_frame, end_frame = end_frame, end_frame + 1
-            initial_direction = diffs[start_frame]
-        else:
-            end_frame = frame
-
-
-
-        # print  mwe_copy.loc[indices]['ordinal']
+        # Alter period if a sign change is observed
+        if frame <= end_frame:
+            if not (np.sign(diffs[end_frame]) == np.sign(initial_direction)):
+                period = dt * (end_frame - start_frame) * 2
+                start_frame, end_frame = end_frame, end_frame + 1
+                initial_direction = diffs[start_frame]
+            else:
+                end_frame = frame
 
     mwe_copy['color_group'] = mwe_copy['ordinal']
 
-
-
-
-
-
-
-    # # Apply various thresholds
-    # # Make a second copy here
-    # mwe_copy2 = mwe_copy[
-    #     ((mwe_copy.pixlen >= long_pixlen_thresh) & 
-    #         (mwe_copy.fol_y < fol_y_cutoff)) | 
-    #     ((mwe_copy.pixlen >= short_pixlen_thresh) & 
-    #         (mwe_copy.fol_y >= fol_y_cutoff))
-    # ].copy()
-
-    # # Subsample to save time
-    # mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
-
-    # # Argsort each frame
-    # print "sorting whiskers in order"
-    
-    # # No need to add 1 because rank starts with 1
-    # mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(
-    #     lambda ser: ser.rank(method='first', ascending=rank_foly_ascending))
-
-    # # Anything beyond C4 is not real
-    # mwe_copy2.loc[mwe_copy2['ordinal'] > max_whiskers, 'ordinal'] = 0
-
-    # # Store the results in the first copy
-    # mwe_copy['color_group'] = 0
-    # mwe_copy.loc[mwe_copy2.index, 'color_group'] = \
-    #     mwe_copy2['ordinal'].astype(np.int)
-    
     return mwe_copy
 
 ##
