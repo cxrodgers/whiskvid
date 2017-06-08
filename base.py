@@ -559,8 +559,8 @@ def create_sensor_functions(L, folx, foly):
 
 def create_state_functions(dt, period):
   def state_function(state):
-    theta = state[0]
-    omega = state[1]
+    theta = state[0][0]
+    omega = state[1][0]
     theta_new = theta + omega * dt
 
 
@@ -637,7 +637,8 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     mwe_copy['ordinal'] = 0
     # Group data by frames and limit to largest n whiskers in frame that are above a certain length threshold
     print "filtering whiskers of interest"
-    mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False).apply(lambda x: x.nlargest(10, 'pixlen')).groupby('frame')
+    # mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False).apply(lambda x: x.nlargest(10, 'pixlen')).groupby('frame')
+    mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False)
 
     #Use frames as timepoints
     dt = 30 ** -1
@@ -664,7 +665,8 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
             continue
         if frame % 10000 == 0:
             print frame
-        indices = [idx[1] for idx in observations_in_frame.index.values]
+        # indices = [idx[1] for idx in observations_in_frame.index.values]
+        indices = observations_in_frame.index.values
 
         observation_dicts = []
         for j, o in observations_in_frame.iterrows():
