@@ -25,7 +25,7 @@ import os
 import my
 import ArduFSM
 import MCwatch.behavior
-from kalman.kalman_classes import *
+from kalman.kalman import *
 import whiskvid
 import matplotlib.pyplot as plt
 import pandas
@@ -638,7 +638,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     # Group data by frames and limit to largest n whiskers in frame that are above a certain length threshold
     print "filtering whiskers of interest"
     # mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False).apply(lambda x: x.nlargest(10, 'pixlen')).groupby('frame')
-    mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame', as_index=False)
+    mwe_filtered = mwe_copy[mwe_copy.pixlen > 40].groupby('frame')
 
     #Use frames as timepoints
     dt = 30 ** -1
