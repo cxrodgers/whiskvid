@@ -544,12 +544,12 @@ def create_sensor_functions(L, folx, foly):
   def sensor_function(state):
     theta = state[0][0]
     return np.array([
-        [L * np.cos(theta), L * np.sin(theta), folx, foly]
+        [folx - np.abs(L * np.cos(theta)), L * np.sin(theta) + foly, folx, foly]
     ]).T
   def sensor_function_jacobian(state):
     theta = state[0][0]
     return np.array([
-      [-L * np.sin(theta), 0],
+      [L * np.sin(theta), 0],
       [L * np.cos(theta), 0],
       [0, 0],
       [0, 0],
@@ -684,7 +684,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
 
             x0 = np.array([[theta, omega]]).T
             # z is an array of the x and y coordinates of the tip. Can calculate as shown or use xtip, ytip
-            z = np.array([[length * np.cos(theta), length * np.sin(theta), xfol, yfol]]).T
+            z = np.array([[xtip, ytip, xfol, yfol]]).T
 
             #Parameters that will be passed into the Kalman Filter each iteration
             sensor_factory_args = [length, xfol, yfol]
