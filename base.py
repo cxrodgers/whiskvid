@@ -45,7 +45,7 @@ GLOBAL_WHISKER2COLOR = {
     'C4': 'magenta'}
 
 ## loading functions for raw .whiskers and .measurements files
-def load_measurements(measure_file):
+def load_measurements(measure_file, convert_to_int=True, set_index=True):
     """Load measurements, such as curvature.
     
     The data is taken from traj.MeasurementsTable
@@ -72,6 +72,10 @@ def load_measurements(measure_file):
     measure_file : string
         Path to *.measurements file from measure
     
+    convert_to_int : if True, then convert 'frame' and 'wid' columns to int
+    set_index : if True, then set index to ['frame', 'wid']
+        Don't do this if you want to maintain the ordering of the columns
+    
     Returns: DataFrame
         Has one row for each whisker segment.
         Columns: smask, frame, wid, path_length, score, 
@@ -83,13 +87,40 @@ def load_measurements(measure_file):
     tmtdf = pandas.DataFrame(tmt_arr,
         columns=['smask', 'frame', 'wid', 'path_length', 'score',
             'angle', 'curv', 'fol_x', 'fol_y', 'tip_x', 'tip_y'])
-    for col in ['frame', 'wid']:
-        tmtdf[col] = tmtdf[col].astype(np.int)
     
-    tmtdf = tmtdf.set_index(['frame', 'wid'], verify_integrity=True).sort_index()
+    if convert_to_int:
+        for col in ['frame', 'wid']:
+            tmtdf[col] = tmtdf[col].astype(np.int)
     
-
+    if set_index:
+        tmtdf = tmtdf.set_index(['frame', 'wid'], verify_integrity=True).sort_index()
+    
     return tmtdf
+
+def save_measurements(measurements_df, filename, force=False):
+    """Save a new measurements file
+    
+    measurements_df : DataFrame obtained from load_measurements
+    filename : file to write
+    """
+    # If the index has been set, make it look like the original
+    if 'frame' in measurements_df.index.names:
+        measurements_df = measurements_df.reset_index()
+    
+    # Order the columns like whiski expects
+    measurements_df = measurements_df[
+        ['smask', 'frame', 'wid', 'path_length', 'score',
+            'angle', 'curv', 'fol_x', 'fol_y', 'tip_x', 'tip_y']
+    ]
+    
+    # Convert to whiski object
+    tmt = traj.MeasurementsTable(measurements_df.values.copy())
+    
+    # Save
+    if not force and os.path.exists(filename):
+        raise IOError("%s exists; use force=True to overwrite" % filename)
+    tmt.save(filename)
+
 
 ## Begin stuff for putting whisker data into HDF5
 try:
