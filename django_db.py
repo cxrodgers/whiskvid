@@ -15,6 +15,9 @@ import runner.models
 import MCwatch.behavior
 import my.misc
 
+# for video_range_bbase
+import my.video
+
 # Search in the following order for the session
 root_directory_search_list = [
     '/mnt/fast/data/whisker/processed',
@@ -226,6 +229,24 @@ class VideoSession(object):
             anatomical_order.index(wname) for wname in res['whisker']]
         
         return res
+    
+    @property
+    def video_range_bbase(self):
+        """Return the start and stop times of the video in behavioral timebase.
+        
+        Gets the duration of the monitor video and uses self.fit_v2b to
+        convert.
+        
+        Returns: array of (start, stop) times
+        """
+        # Get duration of monitor video in spurious timebase
+        video_duration_s = my.video.get_video_duration2(
+            self.data.monitor_video.get_path)
+        
+        # Convert to bbase
+        video_range_bbase = np.polyval(self.fit_v2b, [0, video_duration_s])    
+        
+        return video_range_bbase
     
     ## Other methods
     # These are things that don't make sense for a Handler
