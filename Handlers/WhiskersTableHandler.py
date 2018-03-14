@@ -62,6 +62,13 @@ class WhiskersTableHandler(CalculationHandler):
 
         return mwe
 
+    @property
+    def new_path(self):
+        """Filename of whiskers table (overriding _name which is 'whiskers')
+        
+        """
+        return 'whiskers.h5'
+
 def get_masked_whisker_ends_nodb(h5_filename, side, 
     fol_range_x, fol_range_y, length_thresh=75, 
     verbose=True, add_angle=True):
