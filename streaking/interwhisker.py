@@ -3,6 +3,7 @@ import numpy as np
 import pandas
 import scipy.special
 import scipy.stats
+import base
 
 def update_relationships2(mwe, drop_same=False, drop_nan=True):
     ## More efficient ls_dist
@@ -18,7 +19,7 @@ def update_relationships2(mwe, drop_same=False, drop_nan=True):
         merged = merged.loc[merged['object0'] != merged['object1']]
 
     # Vectorize
-    merged['dist'] = vectorized_ls_dist(merged)
+    merged['dist'] = base.vectorized_ls_dist(merged)
     
     # Drop NaN dists, this seems to be rare
     if drop_nan:
@@ -150,7 +151,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
                     continue
                 
                 # Calculate distance between this pair
-                dist = ls_dist(
+                dist = base.ls_dist(
                     frame_data['tip_x'].iloc[idx0],
                     frame_data['tip_y'].iloc[idx0],
                     frame_data['fol_x'].iloc[idx0],

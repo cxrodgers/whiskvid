@@ -1,5 +1,6 @@
 import numpy as np
 import pandas
+import base
 
 
 def measure_smoothness_costs_old(mwe, next_frame_streaks, alignments, next_frame,
@@ -164,7 +165,7 @@ def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
         suffixes=('0', '1')).drop('key', 1)
     
     # Calculate the distance for each streak*object pair
-    merged['dist'] = calculate_center2center_distance_on_merged(merged)
+    merged['dist'] = base.calculate_center2center_distance_on_merged(merged)
     
     # Index by object and streak
     merged['object'] = merged['object'].astype(np.int)

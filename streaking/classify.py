@@ -1,6 +1,10 @@
 import numpy as np
 import pandas
-import whiskvid.streaking
+import clumping
+import geometry
+import interwhisker
+import animation
+import smoothness
 
 def find_frame_with_most_simultaneous_streaks(mwe):
     """Returns frame with most simultaneous streaks"""
@@ -59,7 +63,7 @@ def determine_initial_ordering(mwe, frame_start):
 
     ## Reorder object by distance
     # Estimate distances
-    distrs_temp = update_relationships2(mwe)
+    distrs_temp = interwhisker.update_relationships2(mwe)
 
     # mean distance between each object
     mean_dist_between_objects = distrs_temp.pivot_table(
@@ -98,7 +102,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
     # Clump
     print "clumping"
-    mwe = clump_segments_into_streaks(mwe)
+    mwe = clumping.clump_segments_into_streaks(mwe)
     print "done"
 
 
@@ -110,10 +114,10 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
     ## initialize models
     print "updating geometry"
     geometry_model_columns = ['tip_x', 'tip_y', 'fol_x', 'fol_y']
-    model, geometry_scaler = update_geometry(mwe, geometry_model_columns)
+    model, geometry_scaler = geometry.update_geometry(mwe, geometry_model_columns)
 
     print "updating relationships"
-    distrs = update_relationships2(mwe)
+    distrs = interwhisker.update_relationships2(mwe)
 
 
     ## init animation
@@ -121,7 +125,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         unclassified_lines = []
         object2line = {}
         f, ax = plt.subplots()
-        init_animation(mwe, object2line, f, ax)
+        animation.init_animation(mwe, object2line, f, ax)
 
 
     ## Iterate through frames
@@ -176,7 +180,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         ## Test ordering
         print "measuring alignment costs"
         alignments, llik_ser, alignment_llik_df, alignment_costs = (
-            test_all_alignments_for_ordering(
+            interwhisker.test_all_alignments_for_ordering(
             mwe, next_frame_streaks, distrs, streak2object_ser)
         )
         alignment_costs.name = 'alignment'
@@ -184,7 +188,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         
         ## Test geometry
         print "measuring geometry costs"
-        geometry_costs, geometry_costs_by_alignment = measure_geometry_costs(
+        geometry_costs, geometry_costs_by_alignment = geometry.measure_geometry_costs(
             mwe, model, next_frame_streaks, alignments,
             geometry_model_columns, geometry_scaler)
         
@@ -192,7 +196,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         ## Test smoothness
         print "measuring smoothness costs"
         (smoothness_costs, smoothness_costs_by_alignment, 
-            all_smoothness_dists) = measure_smoothness_costs(
+            all_smoothness_dists) = smoothness.measure_smoothness_costs(
             mwe, next_frame_streaks, alignments,
             next_frame)
         smoothness_costs.name = 'smoothness'
@@ -243,10 +247,10 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
         ## Update models
         print "updating geometry"
-        model, geometry_scaler = update_geometry(mwe, geometry_model_columns)
+        model, geometry_scaler = geometry.update_geometry(mwe, geometry_model_columns)
         
         print "updating relationships"
-        distrs = update_relationships2(mwe)
+        distrs = interwhisker.update_relationships2(mwe)
         print "done"
         
 
