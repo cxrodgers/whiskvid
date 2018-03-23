@@ -181,7 +181,8 @@ def calculate_histogram_tips(sub_cwe, row_edges=None, col_edges=None,
 
     return H.T, col_edges, row_edges
 
-def calculate_histogram_tips_over_whiskers(cwe, color2whisker, **kwargs):
+def calculate_histogram_tips_over_whiskers(cwe, color2whisker, 
+    skip_unlabeled=True, **kwargs):
     """Calculate 2d histogram of tips of each whisker separately
     
     cwe : DataFrame with columns 'color_group', 'tip_x', 'tip_y'
@@ -204,7 +205,7 @@ def calculate_histogram_tips_over_whiskers(cwe, color2whisker, **kwargs):
     color_groups = []
     for color, whisker in color2whisker.items():
         # Exclude unlabeled
-        if color == 0:
+        if skip_unlabeled and color == 0:
             continue
         
         # Histogram that whisker and append

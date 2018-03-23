@@ -50,6 +50,25 @@ class ContactsSummaryHandler(CalculationHandler):
         # Store
         self.save_data(contacts_summary)
 
+    def load_data(self, add_trial_info=True, columns_to_join=None):
+        """Load cs and optionally add trial info"""
+        # Parent class to load the raw data
+        res = super(ContactsSummaryHandler, self).load_data()
+
+        # Optionally add trial info
+        if add_trial_info:
+            # Get behavioral data
+            bsession = self.video_session.bsession_name
+            trial_matrix = MCwatch.behavior.db.get_trial_matrix(bsession, True)
+            v2b_fit = self.video_session.fit_v2b
+            
+            # Add it
+            res = whiskvid.add_trial_info_to_video_dataframe(res, trial_matrix, 
+                v2b_fit, df_column='frame_start', 
+                columns_to_join=columns_to_join)
+        
+        return res
+
 class ColorizedContactsSummaryHandler(CalculationHandler):
     """Colorized contacts summmary"""
     _db_field_path = 'colorized_contacts_summary_filename'
