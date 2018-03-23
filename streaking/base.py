@@ -92,3 +92,80 @@ def calculate_center2center_distance_on_merged(merged):
     return res
 
 
+def score(jres, cres, curated_num2name):
+    ## Join jason's results onto curated results
+    ares = cres.join(jres, rsuffix='_jason', how='inner')
+
+    # For right now drop the unlabeled ones in the curated dataset
+    ares = ares[ares.color_group != -1].copy()
+
+
+    ## Print general statistics of each dataset
+    zobj = zip(['Test', 'Curated', 'Joint'], [jres, cres, ares])
+    for setname, label_set in zobj:
+        print "%s dataset:\n----" % setname
+        unique_labels = label_set['color_group'].value_counts().index.values
+        print "%d groups: %s (in order of prevalence)" % (
+            len(unique_labels), ','.join(map(str, unique_labels)))
+        print "%d rows, of which %d unlabeled (-1)" % (
+            len(label_set), np.sum(label_set['color_group'] == -1))
+        print
+
+
+    ## Figure out the mapping between j_labels and c_labels
+    # Count confusion matrix
+    confusion_matrix = ares.reset_index().pivot_table(
+        index='color_group', columns='color_group_jason', values='frame', 
+        aggfunc='count').fillna(0).astype(np.int)
+
+    # Assign
+    # j_labels will be Jason's labels for curated classes in sorted order
+    # j_labels_idx is an index into the actual labels, which 
+    # are on the pandas columns
+    c_labels_idx, j_labels_idx = scipy.optimize.linear_sum_assignment(
+        -confusion_matrix.values)
+    j_labels = confusion_matrix.columns.values[j_labels_idx]
+    c_labels = confusion_matrix.index.values[c_labels_idx]
+    unused_j_labels = np.array([j_label for j_label in confusion_matrix.columns 
+        if j_label not in j_labels])
+
+    # Sort the columns of the confusion matrix to match c_labels
+    new_column_order = list(j_labels) + list(unused_j_labels)
+    confusion_matrix = confusion_matrix.loc[:, new_column_order]
+
+    # Print results
+    print "Assignments (C>J):\n%s" % ('\n'.join([
+        '%s (%s) > %s' % (c_label, curated_num2name[c_label], j_label) 
+        for c_label, j_label in zip(c_labels, j_labels)]))
+    print "Unassigned labels: %s" % (' '.join(map(str, unused_j_labels)))
+    print
+
+
+    ## Calculate performance
+    print "Confusion matrix: "
+    relabeled_confusion_matrix = confusion_matrix.join(curated_num2name).set_index(
+        'whisker')
+    print relabeled_confusion_matrix
+    print
+
+    return relabeled_confusion_matrix
+    
+    
+def parse_confusion_into_sensitivity_and_specificity(relabeled_confusion_matrix):
+    ## Metrics
+    sensitivity = (relabeled_confusion_matrix.values.diagonal() / 
+        relabeled_confusion_matrix.sum(1))
+
+    # This will fail if there are unused j_labels
+    specificity = (relabeled_confusion_matrix.values.diagonal() / 
+        relabeled_confusion_matrix.sum(0))
+    specificity.index = sensitivity.index
+    metrics = pandas.concat([sensitivity, specificity], 
+        axis=1, verify_integrity=True,
+        keys=['sensitivity', 'specificity'])
+    print metrics
+    
+    return metrics
+    
+    
+    
