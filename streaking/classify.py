@@ -132,15 +132,6 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
     next_frame = frame_start
     perf_rec_l = []
     while True:
-        ## Stop if no more data
-        if not mwe['object'].isnull().any():
-            break
-        
-        # Loop
-        if next_frame > mwe['frame'].max():
-            next_frame = mwe['frame'].min()
-        
-        
         ## Animate
         if DO_ANIMATION:
             if next_frame > ANIMATION_START:
@@ -264,7 +255,22 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
         
         ## next frame
-        next_frame += 1
+        # Stop if no more data
+        if mwe.loc[mwe['frame'] >= next_frame, 'object'].isnull().any():
+            # Move forward to next frame
+            next_frame = mwe.loc[
+                (mwe['frame'] >= next_frame) &
+                (mwe['object'].isnull())
+            ]['frame'].iloc[0]
+        
+        elif mwe.loc[:, 'object'].isnull().any():
+            # No more after this
+            # Go back to the first unassigned frame
+            next_frame = mwe.loc[(mwe['object'].isnull())]['frame'].iloc[0]            
+        
+        else:
+            # No more data to process, so stop
+            break
 
     res = {
         'mwe': mwe, 
