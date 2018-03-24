@@ -113,8 +113,9 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
     ## initialize models
     print "updating geometry"
-    geometry_model_columns = ['tip_x', 'tip_y', 'fol_x', 'fol_y']
-    model, geometry_scaler = geometry.update_geometry(mwe, geometry_model_columns)
+    geometry_model_columns = ['tip_x', 'tip_y', 'fol_x', 'fol_y', 'length']
+    model, geometry_scaler = geometry.update_geometry(mwe, 
+        geometry_model_columns, model_typ='nb')
 
     print "updating relationships"
     distrs = interwhisker.update_relationships2(mwe)
@@ -277,7 +278,8 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
         ## Update models
         print "updating geometry"
-        model, geometry_scaler = geometry.update_geometry(mwe, geometry_model_columns)
+        model, geometry_scaler = geometry.update_geometry(mwe, 
+            geometry_model_columns, model_typ='nb')        
         
         print "updating relationships"
         distrs = interwhisker.update_relationships2(mwe)

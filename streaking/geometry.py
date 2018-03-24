@@ -4,7 +4,7 @@ import sklearn.linear_model
 import sklearn.naive_bayes
 
 
-def update_geometry(mwe, geometry_model_columns, key='object'):
+def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     """Model the geometry of known objects in mwe
     
     mwe : mwe
