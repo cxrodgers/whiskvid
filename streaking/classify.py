@@ -305,10 +305,11 @@ class Classifier(object):
         
         # TODO: accept alignments rather than overwriting
         if oracular:
-            alignments, llik_ser, alignment_llik_df, alignment_costs = (
+            llik_ser, alignment_llik_df, alignment_costs = (
                 interwhisker.test_all_alignments_for_ordering(
                     self.classified_data, 
                     streaks_in_frame, 
+                    alignments,
                     self.oracular_interwhisker_distrs, 
                     self.streak2object_ser,
                 )
@@ -316,12 +317,14 @@ class Classifier(object):
             alignment_costs.name = 'alignment'
         
         else:
-            alignments, llik_ser, alignment_llik_df, alignment_costs = (
+            llik_ser, alignment_llik_df, alignment_costs = (
                 interwhisker.test_all_alignments_for_ordering(
                     self.classified_data, 
                     streaks_in_frame, 
+                    alignments,
                     self.interwhisker_distrs, 
                     self.streak2object_ser,
+                    key='object', # because it's already called that in distrs
                 )
             )
             alignment_costs.name = 'alignment'            
@@ -360,15 +363,26 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "measuring smoothness costs"
         
-        # Actually calculate smoothness
-        (smoothness_costs, smoothness_costs_by_alignment, 
-            all_smoothness_dists) = smoothness.measure_smoothness_costs(
-                self.classified_data,
-                streaks_in_frame,
-                alignments,
-                self.current_frame,
-            )
-        smoothness_costs.name = 'smoothness'
+        if oracular:
+            (smoothness_costs, smoothness_costs_by_alignment, 
+                all_smoothness_dists) = smoothness.measure_smoothness_costs(
+                    self.classified_data,
+                    streaks_in_frame,
+                    alignments,
+                    self.current_frame,
+                    key='color_group_test',
+                )
+            smoothness_costs.name = 'smoothness'
+        
+        else:
+            (smoothness_costs, smoothness_costs_by_alignment, 
+                all_smoothness_dists) = smoothness.measure_smoothness_costs(
+                    self.classified_data,
+                    streaks_in_frame,
+                    alignments,
+                    self.current_frame,
+                )
+            smoothness_costs.name = 'smoothness'            
         
 
         return {
@@ -413,6 +427,16 @@ class Classifier(object):
             'metric').sort_index()
         
         return votes_df
+
+    def get_oracular_votes_df(self):
+        """Return the results of all votes from all constraints thus far"""
+        # Concat the votes
+        votes_df = pandas.concat(self.oracular_votes_l, axis=0, 
+            keys=self.oracular_vote_keys_l, 
+            verify_integrity=True, names=['frame', 'metric']).unstack(
+            'metric').sort_index()
+        
+        return votes_df
     
     def get_state(self):
         return {
@@ -440,11 +464,23 @@ class Classifier(object):
         self.frame_start = find_frame_with_most_simultaneous_streaks(
             self.clumped_data)
         
-        
+
         ## Create initial ordering and self.classified_data
         self.streak2object_ser, self.classified_data = (
             determine_initial_ordering(self.clumped_data, self.frame_start)
         )
+        
+        if use_oracular:
+            # The most common color_group assigned to each streak
+            # Some streaks may erroneously combine across color groups
+            oracular_streak2object_ser = self.classified_data.groupby(
+                'streak')['color_group'].apply(
+                lambda ser: ser.value_counts().idxmax()
+            )            
+        
+        # Identify where each streak first appears
+        self.first_frame_of_each_streak = self.classified_data[
+            ['streak', 'frame']].dropna().drop_duplicates('streak')
 
 
         ## initialize models
@@ -476,9 +512,14 @@ class Classifier(object):
             self.oracular_perf_rec_l = []
             self.oracular_votes_l = []
             self.oracular_vote_keys_l = []
+            self.oracular_final_selection_keys_l = []
+            self.oracular_final_selection_l = []
         
         # Loop till break
         while True:
+            if self.verbosity >= 1:
+                print "info: starting frame %d" % self.current_frame
+            
             ## Animate
             if self.animate:
                 self.update_animation()
@@ -490,10 +531,31 @@ class Classifier(object):
             )
             
             if use_oracular:
+                # Create a test column of color_group
+                self.classified_data['color_group_test'] = (
+                    self.classified_data['color_group'].copy()
+                )
+                
+                # test_streaks are all streaks that begin in this frame
+                test_streaks = self.first_frame_of_each_streak.loc[
+                    self.first_frame_of_each_streak['frame'] == 
+                    self.current_frame, 'streak'].values                
+                
+                # Temporarily blank them out
+                self.classified_data.loc[
+                    self.classified_data['streak'].isin(test_streaks), 
+                    'color_group_test'] = np.nan
+                
+                # Also blank out oracular streak assignments
+                test_oracular_streak2object_ser = (
+                    oracular_streak2object_ser.drop(test_streaks))
+                
+                # Pick streaks and objects
                 oracular_streaks_and_objects = (
                     pick_streaks_and_objects_for_current_frame(
                         self.classified_data, self.current_frame,
-                        self.streak2object_ser, key='color_group',
+                        test_oracular_streak2object_ser, 
+                        key='color_group_test',
                     )
                 )                
             
@@ -520,6 +582,12 @@ class Classifier(object):
                 streaks_and_objects['streaks_in_frame'],
                 self.streak2object_ser,
             )
+            
+            if use_oracular:
+                oracular_alignments = interwhisker.define_alignments(
+                    oracular_streaks_and_objects['streaks_in_frame'],
+                    test_oracular_streak2object_ser,
+                )                
             
             
             ## Test all constraints
@@ -557,7 +625,7 @@ class Classifier(object):
                 
                 # Test the constraints
                 oracular_constraint_tests = self.test_all_constraints(
-                    alignments, 
+                    oracular_alignments, 
                     oracular_streaks_and_objects['streaks_in_frame'],
                     oracular=True,
                 )
@@ -583,9 +651,9 @@ class Classifier(object):
             
             # Weighted sum
             overall_metrics = (
-                .35 * metrics['smoothness'] +
-                .35 * metrics['alignment'] +
-                .3 * metrics['geometry']
+                .2 * metrics['smoothness'] +
+                .4 * metrics['alignment'] +
+                .4 * metrics['geometry']
             )
             
             # Choose the best alignment
@@ -604,14 +672,15 @@ class Classifier(object):
                 
                 # Weighted sum
                 oracular_overall_metrics = (
-                    .35 * oracular_metrics['smoothness'] +
-                    .35 * oracular_metrics['alignment'] +
-                    .3 * oracular_metrics['geometry']
+                    .2 * oracular_metrics['smoothness'] +
+                    .4 * oracular_metrics['alignment'] +
+                    .4 * oracular_metrics['geometry']
                 )
                 
                 # Choose the best alignment
                 oracular_best_choice_idx = np.argmax(oracular_overall_metrics)
-                oracular_best_alignment = alignments[oracular_best_choice_idx]
+                oracular_best_alignment = oracular_alignments[
+                    oracular_best_choice_idx]
                 oracular_best_choice_llik = oracular_overall_metrics[
                     oracular_best_choice_idx]                
 
@@ -625,6 +694,7 @@ class Classifier(object):
                 'frame': self.current_frame, 
                 'cost': best_choice_llik,
                 'n_alignments': len(alignments),
+                'metrics_of_best': metrics.iloc[best_choice_idx],
             })
             
             # The vote of each metric
@@ -641,13 +711,15 @@ class Classifier(object):
                 metric_vote2.index.name = 'streak'
                 self.votes_l.append(metric_vote2)
                 self.vote_keys_l.append((self.current_frame, metric))
-
+            
             # Repeat for oracular
             if use_oracular:
                 self.oracular_perf_rec_l.append({
                     'frame': self.current_frame, 
                     'cost': oracular_best_choice_llik,
-                    'n_alignments': len(alignments),
+                    'n_alignments': len(oracular_alignments),
+                    'metrics_of_best': oracular_metrics.iloc[
+                        oracular_best_choice_idx],
                 })
                 
                 # The vote of each metric
@@ -656,7 +728,7 @@ class Classifier(object):
                     if metric == 'smoothness' and not oracular_worth_measuring_smoothness:
                         continue
                     
-                    oracular_metric_vote = alignments[
+                    oracular_metric_vote = oracular_alignments[
                         oracular_metrics[metric].idxmax()]
                     oracular_metric_vote2 = pandas.Series(
                         *np.transpose(oracular_metric_vote), 
@@ -666,7 +738,15 @@ class Classifier(object):
                     oracular_metric_vote2.index.name = 'streak'
                     self.oracular_votes_l.append(oracular_metric_vote2)
                     self.oracular_vote_keys_l.append(
-                        (self.current_frame, metric))                
+                        (self.current_frame, metric))     
+                
+                # The overall vote
+                self.oracular_final_selection_l.append(pandas.Series(
+                    *np.transpose(oracular_best_alignment), 
+                    name='color_group').loc[
+                    oracular_streaks_and_objects['unassigned_streaks']
+                ])
+                self.oracular_final_selection_keys_l.append(self.current_frame)
 
 
             ## Update models
