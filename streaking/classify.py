@@ -211,6 +211,7 @@ class Classifier(object):
                     self.classified_data,
                     self.geometry_model_columns, 
                     model_typ='nb',
+                    key='color_group',
                 )
             )
         else:
@@ -225,18 +226,32 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "done updating geometry"
 
-    def update_interwhisker_model(self):
+    def update_interwhisker_model(self, oracular=False):
         """Set self.interwhisker_distrs from self.classified_data
-        
-        Sets self.interwhisker_dists
+
+        oracular: bool
+            if False, use the 'object' key and save to 
+                self.interwhisker_distrs
+            if True, use the 'color_group' key and save to 
+                self.oracular_interwhisker_distrs
         """
         if self.verbosity >= 2:
             print "updating interwhisker"
         
-        self.interwhisker_distrs = interwhisker.update_relationships2(
-            self.classified_data,
-        )
-
+        if oracular:
+            self.oracular_interwhisker_distrs = (
+                interwhisker.update_relationships2(
+                    self.classified_data,
+                    key='color_group',
+                )
+            )
+        else:
+            self.interwhisker_distrs = (
+                interwhisker.update_relationships2(
+                    self.classified_data,
+                )
+            )
+        
         if self.verbosity >= 2:
             print "done updating interwhisker"
     
