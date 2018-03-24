@@ -94,10 +94,10 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
     
     return alignments
 
-def test_all_alignments_for_ordering(mwe, next_frame_streaks, 
+def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
     distrs, streak2object_ser,
     min_data_count=50, pval_floor=1e-6, clamp_std=10,
-    verbose=True,
+    verbose=True, key='object',
     ):
     """Test all possible alignments for streaks to known objects for ordering.
     
@@ -120,26 +120,6 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
     Returns: alignments, alignment_costs
         
     """
-    # These streaks have already been assigned
-    pre_assigned_streaks = streak2object_ser.reindex(
-        next_frame_streaks).dropna().astype(np.int)
-
-    # Identify which streaks need to be assigned
-    streaks_to_assign = [streak for streak in next_frame_streaks
-        if streak not in streak2object_ser.index]
-    
-    # Identify which objects are available
-    available_objects = [obj for obj in streak2object_ser.unique()
-        if obj not in pre_assigned_streaks.values]
-    
-    print "need to assign %r to %r;\n%r already assigned to %r" % (
-        streaks_to_assign, available_objects, 
-        pre_assigned_streaks.index, pre_assigned_streaks.values,
-    )
-    
-    if len(streaks_to_assign) > len(available_objects):
-        1/0
-    
     # Take all data from each streak in `next_frame_streaks`
     streak_data = mwe.loc[mwe['streak'].isin(next_frame_streaks)]
     
@@ -181,14 +161,17 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
 
     
     ## Now compare every pair of streaks, to every pair of known objects in distrs
+    key0 = key + '0'
+    key1 = key + '1'
+    
     # We have streaks A,B,C,... to assign to objects 1,2,3,...
     # For every pairwise inter-streak distance A-B, compare to every pairwise
     # inter-object distance distribution 1-2.
     method = 'fast'
     if method == 'fast':
         # Mean and std of every object*object distr, excluding same*same
-        gobj = distrs.query('object0 != object1').groupby([
-            'object0', 'object1'])['dist']    
+        gobj = distrs.query('%s != %s' % (key0, key1)).groupby([
+            key0, key1])['dist']    
         mdist = gobj.mean()
         sdist = gobj.std()
         ndist = gobj.count()
@@ -209,11 +192,11 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
             np.abs(normprobe.values))))
         logp_probe = pandas.DataFrame(logp_probe, index=normprobe.index,
             columns=normprobe.columns)
-        llik_ser = logp_probe.stack('object0').stack('object1')
+        llik_ser = logp_probe.stack(key0).stack(key1)
     
     elif method == 'old':
         rec_l = []
-        gobj = distrs.groupby(['object0', 'object1'])['dist']    
+        gobj = distrs.groupby([key0, key1])['dist']    
         
         # Iterate over pairs of streaks
         for (streak0, streak1), streak_dist in pd_mean.iteritems():
@@ -253,30 +236,6 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
             ['streak0', 'streak1', 'object0', 'object1'])['llik'].sort_index()
 
 
-    ## Define alignments from objects to streaks
-    # Pre-assigned streaks
-    pre_assigned_assignments = zip(
-        pre_assigned_streaks.values,
-        pre_assigned_streaks.index.values,
-    )
-    
-    if len(available_objects) < len(streaks_to_assign):
-        # More streaks than objects, need to add a new object
-        1/0
-        
-    else:
-        # More objects than streaks, or the same number
-        # All streaks_to_assign-length permutations of available_objects
-        permuted_objects_l = itertools.permutations(
-            available_objects, len(streaks_to_assign))
-        
-        # Zip them up with streaks_to_assign, appending fixed assignments
-        alignments = [
-            zip(permuted_objects, streaks_to_assign) + pre_assigned_assignments
-            for permuted_objects in permuted_objects_l
-        ]
-    
-    
     ## Cost of each alignment
     method = 'fast' # 'old'
     if method == 'fast':
@@ -325,7 +284,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks,
     # Sum by alignment
     alignment_costs = alignment_llik_df.groupby('n_alignment')['llik'].sum()
 
-    return alignments, llik_ser, alignment_llik_df, alignment_costs
+    return llik_ser, alignment_llik_df, alignment_costs
 
 def test_relationships(mwe, stf_data, distrs, min_data_count=50, clamp_std=10):
     # Apply the line dist to each overlapping known streak
