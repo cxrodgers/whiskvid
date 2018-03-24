@@ -281,53 +281,79 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "done updating animation"
 
-    def test_all_constraints(self, alignments, streaks_in_frame):
+    def test_all_constraints(self, alignments, streaks_in_frame, 
+        oracular=False):
         """Test all constraints on all possible alignments
         
         alignments : alignments to test
             Currently overwritten
         
         Returns: dict
-            'alignments': alignments,
-            'interwhisker_costs_by_alignment': alignment_costs,
-            'interwhisker_costs_by_assignment': alignment_llik_df,
-            'interwhisker_costs_lookup_series': llik_ser,
-            'geometry_costs_by_alignment': geometry_costs_by_alignment,
-            'geometry_costs_by_assignment': geometry_costs,
-            'smoothness_costs_by_alignment': smoothness_costs_by_alignment,
-            'smoothness_costs_by_assignment': smoothness_costs,
-            'smoothness_costs_lookup_dist_df': all_smoothness_dists,        
+            'alignments':
+            'interwhisker_costs_by_alignment': 
+            'interwhisker_costs_by_assignment':
+            'interwhisker_costs_lookup_series':
+            'geometry_costs_by_alignment':
+            'geometry_costs_by_assignment':
+            'smoothness_costs_by_alignment':
+            'smoothness_costs_by_assignment':
+            'smoothness_costs_lookup_dist_df':
         """
         ## Test ordering
         if self.verbosity >= 2:
             print "measuring alignment costs"
         
         # TODO: accept alignments rather than overwriting
-        alignments, llik_ser, alignment_llik_df, alignment_costs = (
-            interwhisker.test_all_alignments_for_ordering(
-                self.classified_data, 
-                streaks_in_frame, 
-                self.interwhisker_distrs, 
-                self.streak2object_ser,
+        if oracular:
+            alignments, llik_ser, alignment_llik_df, alignment_costs = (
+                interwhisker.test_all_alignments_for_ordering(
+                    self.classified_data, 
+                    streaks_in_frame, 
+                    self.oracular_interwhisker_distrs, 
+                    self.streak2object_ser,
+                )
             )
-        )
-        alignment_costs.name = 'alignment'
+            alignment_costs.name = 'alignment'
+        
+        else:
+            alignments, llik_ser, alignment_llik_df, alignment_costs = (
+                interwhisker.test_all_alignments_for_ordering(
+                    self.classified_data, 
+                    streaks_in_frame, 
+                    self.interwhisker_distrs, 
+                    self.streak2object_ser,
+                )
+            )
+            alignment_costs.name = 'alignment'            
         
         
         ## Test geometry
         if self.verbosity >= 2:
             print "measuring geometry costs"
         
-        geometry_costs, geometry_costs_by_alignment = (
-            geometry.measure_geometry_costs(
-                self.classified_data, 
-                self.geometry_model, 
-                streaks_in_frame,
-                alignments,
-                self.geometry_model_columns, 
-                self.geometry_scaler,
+        if oracular:
+            geometry_costs, geometry_costs_by_alignment = (
+                geometry.measure_geometry_costs(
+                    self.classified_data, 
+                    self.oracular_geometry_model, 
+                    streaks_in_frame,
+                    alignments,
+                    self.geometry_model_columns, 
+                    self.oracular_geometry_scaler,
+                )
             )
-        )
+        
+        else:
+            geometry_costs, geometry_costs_by_alignment = (
+                geometry.measure_geometry_costs(
+                    self.classified_data, 
+                    self.geometry_model, 
+                    streaks_in_frame,
+                    alignments,
+                    self.geometry_model_columns, 
+                    self.geometry_scaler,
+                )
+            )            
         
 
         ## Test smoothness
@@ -399,8 +425,13 @@ class Classifier(object):
             'votes_df': self.get_votes_df(),
         }
 
-    def run(self):
-        """Run on all frames"""
+    def run(self, use_oracular=False):
+        """Run on all frames
+        
+        use_oracular : if True, then also build models based on the
+            curated correct answers. This is useful for comparing performance
+            given a curated (best-case) model and an actual model.
+        """
         ## Clump
         self.clump()
 
@@ -419,6 +450,11 @@ class Classifier(object):
         ## initialize models
         self.update_geometry_model()
         self.update_interwhisker_model()
+
+        # Oracular
+        if use_oracular:
+            self.update_geometry_model(oracular=True)
+            self.update_interwhisker_model(oracular=True)
 
 
         ## init animation
@@ -550,7 +586,12 @@ class Classifier(object):
             ## Update models
             self.update_geometry_model()
             self.update_interwhisker_model()            
-            
+
+            # Oracular
+            if use_oracular:
+                self.update_geometry_model(oracular=True)
+                self.update_interwhisker_model(oracular=True)            
+
 
             ## Animate the decision
             if self.animate:
