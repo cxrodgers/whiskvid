@@ -3,12 +3,13 @@ import pandas
 import sklearn.linear_model
 
 
-def update_geometry(mwe, geometry_model_columns):
+def update_geometry(mwe, geometry_model_columns, key='object'):
     """Model the geometry of known objects in mwe
     
     mwe : mwe
     geometry_model_columns : list of columns in mwe to incorporate into
         the geometric model
+    key : the columns containing the known labels
     
     # calculate distrs over fol_x, fol_y, tip_x, tip_y for each object
     f, ax = plt.subplots()
@@ -24,7 +25,7 @@ def update_geometry(mwe, geometry_model_columns):
     plt.show()
     
     Returns: model, scaler
-        This is an SVC model that takes geometric inputs, and predicts
+        This is an SGD model that takes geometric inputs, and predicts
         object identity.
     """
     
@@ -43,9 +44,9 @@ def update_geometry(mwe, geometry_model_columns):
     )
 
     # Data
-    model_mask = ~mwe.object.isnull()
+    model_mask = ~mwe[key].isnull()
     input_data = mwe.loc[model_mask, geometry_model_columns].values
-    output_data = mwe.loc[model_mask, 'object'].values.astype(np.int)
+    output_data = mwe.loc[model_mask, key].values.astype(np.int)
 
     # Scale to avoid hanging
     scaler = sklearn.preprocessing.StandardScaler()
