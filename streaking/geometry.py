@@ -1,6 +1,7 @@
 import numpy as np
 import pandas
 import sklearn.linear_model
+import sklearn.naive_bayes
 
 
 def update_geometry(mwe, geometry_model_columns, key='object'):
@@ -33,15 +34,20 @@ def update_geometry(mwe, geometry_model_columns, key='object'):
     #~ model = sklearn.svm.SVC(kernel='linear', class_weight='balanced', 
         #~ probability=True, decision_function_shape='ovr')
 
-    # Build SGD model of the geometry
-    # This permits partial_fit, but seems to be enough faster anyway not to
-    # need it
-    model = sklearn.linear_model.SGDClassifier(
-        fit_intercept=False, # data will be scaled
-        max_iter=1000, tol=1e-3, # to avoid warnings
-        loss='log', # to permit probability estimate
-        class_weight='balanced',
-    )
+    if model_typ == 'sgd':
+        # Build SGD model of the geometry
+        # This permits partial_fit, but seems to be enough faster anyway not to
+        # need it
+        model = sklearn.linear_model.SGDClassifier(
+            fit_intercept=False, # data will be scaled
+            max_iter=1000, tol=1e-3, # to avoid warnings
+            loss='log', # to permit probability estimate
+            class_weight='balanced',
+        )
+    elif model_typ == 'nb':
+        model = sklearn.naive_bayes.GaussianNB()
+    else:
+        1/0
 
     # Data
     model_mask = ~mwe[key].isnull()
