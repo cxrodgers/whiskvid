@@ -5,11 +5,14 @@ import scipy.special
 import scipy.stats
 import base
 
-def update_relationships2(mwe, drop_same=False, drop_nan=True):
+def update_relationships2(mwe, drop_same=False, drop_nan=True, key='object'):
     ## More efficient ls_dist
     # Keep only the non-null objects, and the relevant geometry
     mwe2 = mwe.loc[~mwe['object'].isnull(), 
-        ['tip_x', 'tip_y', 'fol_x', 'fol_y', 'frame', 'object']]
+        ['tip_x', 'tip_y', 'fol_x', 'fol_y', 'frame', key]]
+    
+    # Rename key to object
+    mwe2 = mwe2.rename(columns={key: 'object'})
 
     # Merge with itself, suffixing with 0 and 1
     merged = mwe2.merge(mwe2, on='frame', suffixes=('0', '1'))

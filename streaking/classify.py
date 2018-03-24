@@ -7,7 +7,7 @@ import animation
 import smoothness
 
 def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
-    streak2object_ser):
+    streak2object_ser, key='object'):
     """Pick out streaks to assign and available objects
     
     Slices `mwe` at frame `next_frame`.
@@ -38,7 +38,7 @@ def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
 
     # Identify objects in previous frame (for smoothness)
     objects_in_previous_frame = mwe.loc[mwe['frame'] == (next_frame - 1),
-        'object'].astype(np.int).values
+        key].astype(np.int).values
 
     res = {
         'unassigned_streaks': streaks_to_assign,
@@ -425,7 +425,7 @@ class Classifier(object):
             'votes_df': self.get_votes_df(),
         }
 
-    def run(self, use_oracular=False):
+    def run(self, use_oracular=True):
         """Run on all frames
         
         use_oracular : if True, then also build models based on the
@@ -470,6 +470,12 @@ class Classifier(object):
         self.perf_rec_l = []
         self.votes_l = []
         self.vote_keys_l = []
+
+        # Oracular
+        if use_oracular:
+            self.oracular_perf_rec_l = []
+            self.oracular_votes_l = []
+            self.oracular_vote_keys_l = []
         
         # Loop till break
         while True:
@@ -482,6 +488,14 @@ class Classifier(object):
                 self.classified_data, self.current_frame,
                 self.streak2object_ser,
             )
+            
+            if use_oracular:
+                oracular_streaks_and_objects = (
+                    pick_streaks_and_objects_for_current_frame(
+                        self.classified_data, self.current_frame,
+                        self.streak2object_ser, key='color_group',
+                    )
+                )                
             
             # Skip if no work
             if len(streaks_and_objects['unassigned_streaks']) == 0:
@@ -534,6 +548,30 @@ class Classifier(object):
             )
             assert worth_measuring_smoothness == (not all_smoothness_same)
             
+            # Repeat for oracular
+            if use_oracular:
+                oracular_worth_measuring_smoothness = np.in1d(
+                    oracular_streaks_and_objects['objects_in_previous_frame'], 
+                    oracular_streaks_and_objects['available_objects'],
+                ).any()
+                
+                # Test the constraints
+                oracular_constraint_tests = self.test_all_constraints(
+                    alignments, 
+                    oracular_streaks_and_objects['streaks_in_frame'],
+                    oracular=True,
+                )
+
+                # Debugging check
+                ctscba = oracular_constraint_tests[
+                    'smoothness_costs_by_alignment'].values
+                oracular_all_smoothness_same = np.allclose(
+                    ctscba - ctscba[0],
+                    np.zeros_like(ctscba)
+                )
+                assert oracular_worth_measuring_smoothness == (
+                    not oracular_all_smoothness_same)            
+            
             
             ## Combine geometry and alignment metrics
             # Combine metrics
@@ -554,6 +592,28 @@ class Classifier(object):
             best_choice_idx = np.argmax(overall_metrics)
             best_alignment = alignments[best_choice_idx]
             best_choice_llik = overall_metrics[best_choice_idx]
+
+            # Repeat for oracular
+            if use_oracular:
+                # Combine metrics
+                oracular_metrics = pandas.DataFrame([
+                    oracular_constraint_tests['geometry_costs_by_alignment'],
+                    oracular_constraint_tests['interwhisker_costs_by_alignment'],
+                    oracular_constraint_tests['smoothness_costs_by_alignment'],
+                    ]).T
+                
+                # Weighted sum
+                oracular_overall_metrics = (
+                    .35 * oracular_metrics['smoothness'] +
+                    .35 * oracular_metrics['alignment'] +
+                    .3 * oracular_metrics['geometry']
+                )
+                
+                # Choose the best alignment
+                oracular_best_choice_idx = np.argmax(oracular_overall_metrics)
+                oracular_best_alignment = alignments[oracular_best_choice_idx]
+                oracular_best_choice_llik = oracular_overall_metrics[
+                    oracular_best_choice_idx]                
 
 
             ## Actually assign
@@ -581,6 +641,32 @@ class Classifier(object):
                 metric_vote2.index.name = 'streak'
                 self.votes_l.append(metric_vote2)
                 self.vote_keys_l.append((self.current_frame, metric))
+
+            # Repeat for oracular
+            if use_oracular:
+                self.oracular_perf_rec_l.append({
+                    'frame': self.current_frame, 
+                    'cost': oracular_best_choice_llik,
+                    'n_alignments': len(alignments),
+                })
+                
+                # The vote of each metric
+                for metric in oracular_metrics.columns:
+                    # Skip worthless metric
+                    if metric == 'smoothness' and not oracular_worth_measuring_smoothness:
+                        continue
+                    
+                    oracular_metric_vote = alignments[
+                        oracular_metrics[metric].idxmax()]
+                    oracular_metric_vote2 = pandas.Series(
+                        *np.transpose(oracular_metric_vote), 
+                        name='object').loc[
+                        oracular_streaks_and_objects['unassigned_streaks']
+                    ]
+                    oracular_metric_vote2.index.name = 'streak'
+                    self.oracular_votes_l.append(oracular_metric_vote2)
+                    self.oracular_vote_keys_l.append(
+                        (self.current_frame, metric))                
 
 
             ## Update models
