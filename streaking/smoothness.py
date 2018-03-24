@@ -45,11 +45,11 @@ def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
     object_data = mwe.loc[
         mwe['frame'] == (next_frame - 1)
     ]
-    assert not np.any(object_data['object'].isnull())
+    assert not np.any(object_data[key].isnull())
     
     # Note the objects in previous frame
     # We will penalize disappearance of these objects or appearance of new ones
-    objects_in_previous_frame = object_data['object'].astype(np.int).values
+    objects_in_previous_frame = object_data[key].astype(np.int).values
     
     # Take a subset of columns and copy
     streak_data = streak_data[geometry_model_columns + 
