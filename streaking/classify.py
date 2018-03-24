@@ -6,6 +6,74 @@ import interwhisker
 import animation
 import smoothness
 
+def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
+    streak2object_ser):
+    """Pick out streaks to assign and available objects
+    
+    Slices `mwe` at frame `next_frame`.
+    
+    Returns: dict
+        'streaks_in_frame' : all streaks in frame `next_frame`
+        'assigned_streaks' : streaks in frame `next_frame` that are already
+            assigned
+        'unassigned_streaks' : streaks in frame `next_frame` that aren't
+            assigned yet
+        'available_objects' : objects that are not yet assigned in `next_frame`
+        'objects_in_previous_frame' : objects in previous frame
+    """
+    # Find streaks from next_frame
+    next_frame_streaks = mwe.loc[mwe.frame == next_frame, 'streak'].values
+
+    # These streaks have already been assigned
+    pre_assigned_streaks = streak2object_ser.reindex(
+        next_frame_streaks).dropna().astype(np.int)
+
+    # Identify which streaks need to be assigned
+    streaks_to_assign = [streak for streak in next_frame_streaks
+        if streak not in streak2object_ser.index]
+    
+    # Identify which objects are available
+    available_objects = [obj for obj in streak2object_ser.unique()
+        if obj not in pre_assigned_streaks.values]
+
+    # Identify objects in previous frame (for smoothness)
+    objects_in_previous_frame = mwe.loc[mwe['frame'] == (next_frame - 1),
+        'object'].astype(np.int).values
+
+    res = {
+        'unassigned_streaks': streaks_to_assign,
+        'assigned_streaks': pre_assigned_streaks,
+        'streaks_in_frame': next_frame_streaks,
+        'available_objects': available_objects,
+        'objects_in_previous_frame': objects_in_previous_frame,
+    }
+    
+    return res
+
+def choose_next_frame(mwe, current_frame):
+    """Choose next frame containing unassigned objects with wraparound, or None
+    
+    """
+    # Stop if no more data
+    if mwe.loc[mwe['frame'] >= current_frame, 'object'].isnull().any():
+        # Move forward to next frame
+        next_frame = mwe.loc[
+            (mwe['frame'] >= current_frame) &
+            (mwe['object'].isnull())
+        ]['frame'].iloc[0]
+    
+    elif mwe.loc[:, 'object'].isnull().any():
+        # No more after this
+        # Go back to the first unassigned frame
+        next_frame = mwe.loc[(mwe['object'].isnull())]['frame'].iloc[0]            
+    
+    else:
+        # No more data to process
+        next_frame = None
+    
+    return next_frame
+    
+
 def find_frame_with_most_simultaneous_streaks(mwe):
     """Returns frame with most simultaneous streaks"""
     # insert length of streaks
@@ -43,6 +111,8 @@ def determine_initial_ordering(mwe, frame_start):
         streak2object_ser
         mwe, now with `object` column
     """
+    mwe = mwe.copy()
+    
     ## Define the objects
     # streaks in frame_start
     streaks_in_frame_start = list(mwe[mwe.frame == frame_start][
@@ -87,6 +157,385 @@ def determine_initial_ordering(mwe, frame_start):
     streak2object_ser = pandas.Series(known_object_labels, ordered_sifs)
 
     return streak2object_ser, mwe
+
+
+class Classifier(object):
+    """Classifies whiskers"""
+    def __init__(self, data, animate=False, animation_start_frame=0,
+        verbosity=2):
+        """Initialize a new Classifier
+        
+        data : data to use. Will be copied.
+        animate : whether to animate
+        animation_start_frame : start animating after this frame
+        """
+        # Take init kwargs
+        self.data = data.copy()
+        self.animate = animate
+        self.animation_start_frame = animation_start_frame
+        self.verbosity = verbosity
+        
+        # Some other parameters
+        self.geometry_model_columns = [
+            'tip_x', 'tip_y', 'fol_x', 'fol_y', 'length']
+        
+        # Parameterization that is useful for some things
+        self.data['center_x'] = self.data[['fol_x', 'tip_x']].mean(1)
+        self.data['center_y'] = self.data[['fol_y', 'tip_y']].mean(1)        
+    
+    def clump(self):
+        """Clump rows into streaks"""
+        if self.verbosity >= 2:
+            print "clumping"
+        
+        self.clumped_data = clumping.clump_segments_into_streaks(self.data)
+        
+        if self.verbosity >= 2:
+            print "done clumping"    
+    
+    def update_geometry_model(self):
+        """Set self.model and self.geometry_scaler from self.classified_data"""
+        if self.verbosity >= 2:
+            print "updating geometry"
+        
+        self.model, self.geometry_scaler = geometry.update_geometry(
+            self.classified_data,
+            self.geometry_model_columns, 
+            model_typ='nb',
+        )
+
+        if self.verbosity >= 2:
+            print "done updating geometry"
+
+    def update_interwhisker_model(self):
+        """Set self.interwhisker_distrs from self.classified_data
+        
+        Sets self.interwhisker_dists
+        """
+        if self.verbosity >= 2:
+            print "updating interwhisker"
+        
+        self.interwhisker_distrs = interwhisker.update_relationships2(
+            self.classified_data,
+        )
+
+        if self.verbosity >= 2:
+            print "done updating interwhisker"
+    
+    def setup_animation(self):
+        """Set up animation handles"""
+        # Init handles
+        self.unclassified_lines = []
+        self.object2line = {}
+        self.f, self.ax = plt.subplots()
+        
+        # Init animation
+        animation.init_animation(self.classified_data, 
+            self.object2line, self.f, self.ax,
+        )
+
+    def update_animation(self):
+        """Update animation if current frame >= self.animation_start_frame"""
+        if self.verbosity >= 2:
+            print "updating animation"
+            
+        if self.current_frame >= self.animation_start_frame:
+            animation.update_animation(
+                self.classified_data, self.current_frame, 
+                self.object2line, self.f, self.ax, self.unclassified_lines,
+            )
+
+        if self.verbosity >= 2:
+            print "done updating animation"
+
+    def test_all_constraints(self, alignments, streaks_in_frame):
+        """Test all constraints on all possible alignments
+        
+        alignments : alignments to test
+            Currently overwritten
+        
+        Returns: dict
+            'alignments': alignments,
+            'interwhisker_costs_by_alignment': alignment_costs,
+            'interwhisker_costs_by_assignment': alignment_llik_df,
+            'interwhisker_costs_lookup_series': llik_ser,
+            'geometry_costs_by_alignment': geometry_costs_by_alignment,
+            'geometry_costs_by_assignment': geometry_costs,
+            'smoothness_costs_by_alignment': smoothness_costs_by_alignment,
+            'smoothness_costs_by_assignment': smoothness_costs,
+            'smoothness_costs_lookup_dist_df': all_smoothness_dists,        
+        """
+        ## Test ordering
+        if self.verbosity >= 2:
+            print "measuring alignment costs"
+        
+        # TODO: accept alignments rather than overwriting
+        alignments, llik_ser, alignment_llik_df, alignment_costs = (
+            interwhisker.test_all_alignments_for_ordering(
+                self.classified_data, 
+                streaks_in_frame, 
+                self.interwhisker_distrs, 
+                self.streak2object_ser,
+            )
+        )
+        alignment_costs.name = 'alignment'
+        
+        
+        ## Test geometry
+        if self.verbosity >= 2:
+            print "measuring geometry costs"
+        
+        geometry_costs, geometry_costs_by_alignment = (
+            geometry.measure_geometry_costs(
+                self.classified_data, 
+                self.model, 
+                streaks_in_frame,
+                alignments,
+                self.geometry_model_columns, 
+                self.geometry_scaler,
+            )
+        )
+        
+
+        ## Test smoothness
+        if self.verbosity >= 2:
+            print "measuring smoothness costs"
+        
+        # Actually calculate smoothness
+        (smoothness_costs, smoothness_costs_by_alignment, 
+            all_smoothness_dists) = smoothness.measure_smoothness_costs(
+                self.classified_data,
+                streaks_in_frame,
+                alignments,
+                self.current_frame,
+            )
+        smoothness_costs.name = 'smoothness'
+        
+
+        return {
+            'alignments': alignments,
+            'interwhisker_costs_by_alignment': alignment_costs,
+            'interwhisker_costs_by_assignment': alignment_llik_df,
+            'interwhisker_costs_lookup_series': llik_ser,
+            'geometry_costs_by_alignment': geometry_costs_by_alignment,
+            'geometry_costs_by_assignment': geometry_costs,
+            'smoothness_costs_by_alignment': smoothness_costs,
+            'smoothness_costs_by_assignment': smoothness_costs_by_alignment,
+            'smoothness_costs_lookup_dist_df': all_smoothness_dists,
+        }
+    
+    def do_assignment(self, best_alignment, best_choice_llik):
+        """Actually assign the best alignment"""
+        # assign
+        if self.verbosity >= 1:
+            print "assigning %r, llik %g" % (best_alignment, best_choice_llik)
+        
+        # Actually assign
+        for obj, streak in best_alignment:
+            # This is a pre-assigned assignment in the alignment
+            if streak in self.streak2object_ser.index:
+                assert np.all(self.classified_data.loc[
+                    self.classified_data['streak'] == streak, 
+                    'object'] == obj
+                )
+            else:
+                # Actually assign
+                self.classified_data.loc[
+                    self.classified_data['streak'] == streak, 'object'] = obj
+                
+                # Add to db
+                self.streak2object_ser.loc[streak] = obj        
+
+    def get_votes_df(self):
+        """Return the results of all votes from all constraints thus far"""
+        # Concat the votes
+        votes_df = pandas.concat(self.votes_l, axis=0, keys=self.vote_keys_l, 
+            verify_integrity=True, names=['frame', 'metric']).unstack(
+            'metric').sort_index()
+        
+        return votes_df
+    
+    def get_state(self):
+        return {
+            'mwe': self.classified_data, 
+            'distrs': self.interwhisker_distrs, 
+            'streak2object_ser': self.streak2object_ser,
+            'model': self.model,
+            'geometry_model_columns': self.geometry_model_columns,
+            'geometry_scaler': self.geometry_scaler,
+            'votes_df': self.get_votes_df(),
+        }
+
+    def run(self):
+        """Run on all frames"""
+        ## Clump
+        self.clump()
+
+
+        ## Choose starting point 
+        self.frame_start = find_frame_with_most_simultaneous_streaks(
+            self.clumped_data)
+        
+        
+        ## Create initial ordering and self.classified_data
+        self.streak2object_ser, self.classified_data = (
+            determine_initial_ordering(self.clumped_data, self.frame_start)
+        )
+
+
+        ## initialize models
+        self.update_geometry_model()
+        self.update_interwhisker_model()
+
+
+        ## init animation
+        if self.animate:
+            self.setup_animation()
+
+
+        ## Iterate through frames
+        # Which frame we're on
+        self.current_frame = self.frame_start
+        
+        # Various stuff to keep track of
+        self.perf_rec_l = []
+        self.votes_l = []
+        self.vote_keys_l = []
+        
+        # Loop till break
+        while True:
+            ## Animate
+            if self.animate:
+                self.update_animation()
+            
+            ## Get data
+            streaks_and_objects = pick_streaks_and_objects_for_current_frame(
+                self.classified_data, self.current_frame,
+                self.streak2object_ser,
+            )
+            
+            # Skip if no work
+            if len(streaks_and_objects['unassigned_streaks']) == 0:
+                if self.verbosity >= 2:
+                    print "skipping frame,", self.current_frame
+                self.current_frame += 1
+                continue
+            
+            # Print status
+            if self.verbosity >= 2:
+                print "goal: assign streaks %r to objects %r" % (
+                    streaks_and_objects['unassigned_streaks'],
+                    streaks_and_objects['available_objects'],
+                )
+                print "info: streaks %r already assigned" % (
+                    streaks_and_objects['assigned_streaks'],
+                )
+            
+            
+            ## Define possible alignments
+            alignments = interwhisker.define_alignments(
+                streaks_and_objects['streaks_in_frame'],
+                self.streak2object_ser,
+            )
+            
+            
+            ## Test all constraints
+            # Determine whether it's worth calculating smoothness
+            # Smoothness can only be calculated for objects that are both in
+            # `available_objects` and `objects_in_previous_frame`, in other words,
+            # objects corresponding to streaks that just ended.
+            # Otherwise it's just going to return the disappearing object penalty
+            # for all unfixed assignments, and the same penalty for all fixed
+            # assignments
+            worth_measuring_smoothness = np.in1d(
+                streaks_and_objects['objects_in_previous_frame'], 
+                streaks_and_objects['available_objects'],
+            ).any()
+            
+            # Test the constraints
+            constraint_tests = self.test_all_constraints(alignments, 
+                streaks_and_objects['streaks_in_frame'],
+            )
+
+            # Debugging check
+            ctscba = constraint_tests['smoothness_costs_by_alignment'].values
+            all_smoothness_same = np.allclose(
+                ctscba - ctscba[0],
+                np.zeros_like(ctscba)
+            )
+            assert worth_measuring_smoothness == (not all_smoothness_same)
+            
+            
+            ## Combine geometry and alignment metrics
+            # Combine metrics
+            metrics = pandas.DataFrame([
+                constraint_tests['geometry_costs_by_alignment'],
+                constraint_tests['interwhisker_costs_by_alignment'],
+                constraint_tests['smoothness_costs_by_alignment'],
+                ]).T
+            
+            # Weighted sum
+            overall_metrics = (
+                .35 * metrics['smoothness'] +
+                .35 * metrics['alignment'] +
+                .3 * metrics['geometry']
+            )
+            
+            # Choose the best alignment
+            best_choice_idx = np.argmax(overall_metrics)
+            best_alignment = alignments[best_choice_idx]
+            best_choice_llik = overall_metrics[best_choice_idx]
+
+
+            ## Actually assign
+            self.do_assignment(best_alignment, best_choice_llik)
+
+
+            ## Store some metrics
+            self.perf_rec_l.append({
+                'frame': self.current_frame, 
+                'cost': best_choice_llik,
+                'n_alignments': len(alignments),
+            })
+            
+            # The vote of each metric
+            for metric in metrics.columns:
+                # Skip worthless metric
+                if metric == 'smoothness' and not worth_measuring_smoothness:
+                    continue
+                
+                metric_vote = alignments[metrics[metric].idxmax()]
+                metric_vote2 = pandas.Series(*np.transpose(metric_vote), 
+                    name='object').loc[
+                    streaks_and_objects['unassigned_streaks']
+                ]
+                metric_vote2.index.name = 'streak'
+                self.votes_l.append(metric_vote2)
+                self.vote_keys_l.append((self.current_frame, metric))
+
+
+            ## Update models
+            self.update_geometry_model()
+            self.update_interwhisker_model()            
+            
+
+            ## Animate the decision
+            if self.animate:
+                self.update_animation()
+
+            
+            ## next frame
+            next_frame = choose_next_frame(self.classified_data, 
+                self.current_frame)
+            
+            if next_frame is None:
+                # We're done
+                break
+            else:
+                self.current_frame = next_frame
+        
+        return self.classified_data
+    
 
 def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
     """Run the streaking algorithm on a dataset
