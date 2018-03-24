@@ -4,7 +4,8 @@ import base
 
 
 def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
-    loss_slope = .119, loss_icpt = -5.79, disappearance_cost=100):
+    loss_slope = .119, loss_icpt = -5.79, disappearance_cost=100,
+    key='object'):
     """Measure smoothness costs, based only on center motion
     
     The "smoothness" is how close each streak is to its matched object
@@ -54,7 +55,7 @@ def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
     streak_data = streak_data[geometry_model_columns + 
         ['frame', 'streak']].copy()
     object_data = object_data[geometry_model_columns + 
-        ['object', 'frame']].copy()
+        [key, 'frame']].copy()
     
     # Outer-join on key column
     streak_data['key'] = 1
@@ -66,8 +67,8 @@ def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
     merged['dist'] = base.calculate_center2center_distance_on_merged(merged)
     
     # Index by object and streak
-    merged['object'] = merged['object'].astype(np.int)
-    merged = merged.set_index(['object', 'streak']).sort_index()
+    merged[key] = merged[key].astype(np.int)
+    merged = merged.set_index([key, 'streak']).sort_index()
     
     
     
