@@ -1,13 +1,7 @@
 import numpy as np
-import WhiskiWrap
-import whiskvid
-import runner.models
 import pandas
 import numpy as np
-import my.plot
-import matplotlib.pyplot as plt
-import sklearn.svm, sklearn.preprocessing
-import itertools
+import scipy.optimize
 
 def ls_dist(xA_0, yA_0, xB_0, yB_0, xA_1, yA_1, xB_1, yB_1):
     """Distance between two line segments
