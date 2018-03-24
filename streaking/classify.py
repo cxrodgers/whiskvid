@@ -193,16 +193,34 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "done clumping"    
     
-    def update_geometry_model(self):
-        """Set self.model and self.geometry_scaler from self.classified_data"""
+    def update_geometry_model(self, oracular=False):
+        """Set geometry_model and geometry_scaler from classified_data
+        
+        oracular: bool
+            if False, use the 'object' key and save to 
+                self.geometry_model and self.geometry_scaler
+            if True, use the 'color_group' key and save to 
+                self.oracular_geometry_model and self.oracular_geometry_scaler
+        """
         if self.verbosity >= 2:
             print "updating geometry"
         
-        self.model, self.geometry_scaler = geometry.update_geometry(
-            self.classified_data,
-            self.geometry_model_columns, 
-            model_typ='nb',
-        )
+        if oracular:
+            self.oracular_geometry_model, self.oracular_geometry_scaler = (
+                geometry.update_geometry(
+                    self.classified_data,
+                    self.geometry_model_columns, 
+                    model_typ='nb',
+                )
+            )
+        else:
+            self.geometry_model, self.geometry_scaler = (
+                geometry.update_geometry(
+                    self.classified_data,
+                    self.geometry_model_columns, 
+                    model_typ='nb',
+                )
+            )
 
         if self.verbosity >= 2:
             print "done updating geometry"
@@ -288,7 +306,7 @@ class Classifier(object):
         geometry_costs, geometry_costs_by_alignment = (
             geometry.measure_geometry_costs(
                 self.classified_data, 
-                self.model, 
+                self.geometry_model, 
                 streaks_in_frame,
                 alignments,
                 self.geometry_model_columns, 
@@ -360,7 +378,7 @@ class Classifier(object):
             'mwe': self.classified_data, 
             'distrs': self.interwhisker_distrs, 
             'streak2object_ser': self.streak2object_ser,
-            'model': self.model,
+            'model': self.geometry_model,
             'geometry_model_columns': self.geometry_model_columns,
             'geometry_scaler': self.geometry_scaler,
             'votes_df': self.get_votes_df(),
