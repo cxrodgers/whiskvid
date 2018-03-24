@@ -131,6 +131,8 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
     ## Iterate through frames
     next_frame = frame_start
     perf_rec_l = []
+    votes_l = []
+    vote_keys_l = []
     while True:
         ## Animate
         if DO_ANIMATION:
@@ -153,7 +155,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         # Identify which objects are available
         available_objects = [obj for obj in streak2object_ser.unique()
             if obj not in pre_assigned_streaks.values]
-        
+
         # determine if we have any work to do
         n_streaks_to_assign = len(streaks_to_assign)
         
@@ -186,11 +188,35 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
 
         ## Test smoothness
         print "measuring smoothness costs"
+        
+        # Actually calculate smoothness
         (smoothness_costs, smoothness_costs_by_alignment, 
             all_smoothness_dists) = smoothness.measure_smoothness_costs(
             mwe, next_frame_streaks, alignments,
             next_frame)
         smoothness_costs.name = 'smoothness'
+        
+        # Determine whether it's worth calculating smoothness
+        # Smoothness can only be calculated for objects that are both in
+        # `available_objects` and `objects_in_previous_frame`, in other words,
+        # objects corresponding to streaks that just ended.
+        # Otherwise it's just going to return the disappearing object penalty
+        # for all unfixed assignments, and the same penalty for all fixed
+        # assignments
+        objects_in_previous_frame = mwe.loc[mwe['frame'] == (next_frame - 1),
+            'object'].astype(np.int).values
+        worth_measuring_smoothness = np.in1d(objects_in_previous_frame, 
+            available_objects).any()
+            
+        # Debugging check
+        if worth_measuring_smoothness:
+            assert not np.allclose(
+                smoothness_costs.values - smoothness_costs.values[0], 
+                np.zeros_like(smoothness_costs.values))
+        else:
+            assert np.allclose(
+                smoothness_costs.values - smoothness_costs.values[0], 
+                np.zeros_like(smoothness_costs.values))
         
         
         ## Combine geometry and alignment metrics
@@ -234,6 +260,19 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         perf_rec_l.append({'frame': next_frame, 'cost': best_choice_llik,
             'n_streaks_to_assign': n_streaks_to_assign,
             'n_alignments': len(alignments)})
+        
+        # The vote of each metric
+        for metric in metrics.columns:
+            # Skip worthless metric
+            if metric == 'smoothness' and not worth_measuring_smoothness:
+                continue
+            
+            metric_vote = alignments[metrics[metric].idxmax()]
+            metric_vote2 = pandas.Series(*np.transpose(metric_vote), 
+                name='object').loc[streaks_to_assign]
+            metric_vote2.index.name = 'streak'
+            votes_l.append(metric_vote2)
+            vote_keys_l.append((next_frame, metric))
 
 
         ## Update models
@@ -271,7 +310,12 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         else:
             # No more data to process, so stop
             break
-
+    
+    # Concat the votes
+    votes_df = pandas.concat(votes_l, axis=0, keys=vote_keys_l, 
+        verify_integrity=True, names=['frame', 'metric']).unstack(
+        'metric').sort_index()
+    
     res = {
         'mwe': mwe, 
         'distrs': distrs, 
@@ -279,6 +323,7 @@ def classify(mwe, DO_ANIMATION=False, ANIMATION_START=0):
         'model': model,
         'geometry_model_columns': geometry_model_columns,
         'geometry_scaler': geometry_scaler,
+        'votes_df': votes_df,
     }
 
     return res
