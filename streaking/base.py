@@ -161,5 +161,137 @@ def parse_confusion_into_sensitivity_and_specificity(relabeled_confusion_matrix)
     
     return metrics
     
+def get_confusion_results_and_curated(classified_data, curated_df, 
+    curated_num2name):
+    """Return confusion matrix and object/color_group mapping
     
+    classified_data : results of streaking algorithm
+    curated_df : curated data
+    curated_num2name : color_group to whisker name
+    
+    Returns: confusion_matrix, whisker_name2object_id
+        confusion_matrix : DataFrame with whisker names on rows and
+            identified objects on columns. Values are the number of times
+            that whisker was identified as that object. It will be sorted
+            according to the hungarian algorithm to maximize the diagonal.
+        whisker_name2object_id : Series along the diagonal of confusion_matrix
+            The index is whisker name and the values are corresponding object
+    """
+    # Make labels consistent
+    reformatted_results = classified_data[
+        ['frame', 'seg', 'object']].dropna().astype(
+        np.int).set_index(['frame', 'seg']).rename(
+        columns={'object': 'color_group'})
+
+    # Confusion matrix
+    sconfmat = score(
+        reformatted_results, 
+        curated_df.set_index(['frame', 'seg']), 
+        curated_num2name,
+    )
+
+    # Use rows and columns of confusion matrix to identify correspondence
+    whisker_name2object_id = pandas.Series(
+        sconfmat.columns.values,
+        sconfmat.index.values, 
+        name='object',
+    )
+    
+    return sconfmat, whisker_name2object_id    
+
+def parse_classifier_results(classifier, classified_data):
+    """Parse out results and metrics on each step
+    
+    classifier : object that was used
+    classified_data : With correct_object added
+    
+    Returns: dict with keys:
+        votes : indexed by frame and streak
+        stats : indexed by frame
+        metrics_of_choice : indexed by frame
+    """
+    def deal_with_votes(vdf, chosen_object, correct_object):
+        """Merge the votes of each metric with the actual and correct choice
+        
+        Returns: big_votes_df
+            indexed by frame and streak
+            columns: MultiIndex (voted, chosen, correct) on each metric
+        """
+        # Index chosen object like vdf
+        comp_obj = chosen_object.loc[vdf.index]
+        vote_chosen_df = pandas.DataFrame(
+            vdf.values == comp_obj.values[:, None],
+            index=vdf.index, columns=vdf.columns
+        )
+        
+        # Index correct object like vdf
+        comp_obj = correct_object.loc[vdf.index]
+        vote_correct_df = pandas.DataFrame(
+            vdf.values == comp_obj.values[:, None],
+            index=vdf.index, columns=vdf.columns
+        )        
+        
+        # Concat with vdf
+        big_votes_df = pandas.concat([vdf, vote_chosen_df, vote_correct_df],
+            axis=1, keys=['voted', 'chosen', 'correct'], verify_integrity=True)        
+        
+        return big_votes_df
+    
+    def deal_with_perf_rec(prl):
+        """Parse results from perf_rec_l
+        
+        Returns: stats, metrics
+            Indexed by frame
+        """
+        # Also parse rec_l
+        perf_rec_df = pandas.DataFrame.from_records(prl).set_index(
+            'frame').sort_index()
+
+        # Parse the metrics of the chosen alignment on each frame
+        raw_metrics_of_best = pandas.concat(
+            perf_rec_df.pop('metrics_of_best').values, 
+            keys=perf_rec_df.index).unstack().sort_index()
+        std_metrics_of_best = pandas.concat(
+            perf_rec_df.pop('std_metrics_of_best').values, 
+            keys=perf_rec_df.index).unstack().sort_index()
+        metrics_of_best = pandas.concat([raw_metrics_of_best, std_metrics_of_best],
+            keys=['raw', 'std'], axis=1, verify_integrity=True)        
+        
+        return perf_rec_df, metrics_of_best
+
+    # Parse columns
+    cd2 = classified_data.set_index(['frame', 'streak'])
+    chosen_object = cd2['object']
+    correct_object = cd2['correct_object']
+    correct_color_group = cd2['color_group']
+
+    # Get votes
+    votes = deal_with_votes(classifier.get_votes_df(), 
+        chosen_object, correct_object)
+    
+    # Get oracular votes
+    # This isn't quite right, not sure how to extract the choice that
+    # the oracular version would have chosen
+    ovotes = deal_with_votes(classifier.get_oracular_votes_df(), 
+        correct_color_group, correct_color_group)
+
+    # Get stats and metrics
+    stats, metrics = deal_with_perf_rec(classifier.perf_rec_l)
+    
+    # Get oracular stats and metrics
+    ostats, ometrics = deal_with_perf_rec(classifier.oracular_perf_rec_l)
+    
+    # Concat
+    res_votes = pandas.concat([votes, ovotes], keys=['online', 'oracular'], 
+        axis=1, verify_integrity=True)
+    res_metrics = pandas.concat([metrics, ometrics], keys=['online', 'oracular'], 
+        axis=1, verify_integrity=True)        
+    res_stats = pandas.concat([stats, ostats], keys=['online', 'oracular'], 
+        axis=1, verify_integrity=True)        
+    
+    return {
+        'votes': res_votes,
+        'metrics_of_choice': res_metrics,
+        'stats': res_stats,
+    }
     
