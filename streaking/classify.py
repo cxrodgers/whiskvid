@@ -299,7 +299,6 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "measuring alignment costs"
         
-        # TODO: accept alignments rather than overwriting
         if oracular:
             llik_ser, alignment_llik_df, alignment_costs = (
                 interwhisker.test_all_alignments_for_ordering(
@@ -320,7 +319,6 @@ class Classifier(object):
                     alignments,
                     self.interwhisker_distrs, 
                     self.streak2object_ser,
-                    key='object', # because it's already called that in distrs
                 )
             )
             alignment_costs.name = 'alignment'            
