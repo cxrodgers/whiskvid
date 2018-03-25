@@ -3,6 +3,7 @@ import pandas
 import clumping
 import geometry
 import interwhisker
+import itertools
 import animation
 
 def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
@@ -640,10 +641,17 @@ class Classifier(object):
                 constraint_tests['interwhisker_costs_by_alignment'],
                 ]).T
             
+            # Account for the differing dynamic ranges of each metric
+            # Simply standardize each to [-1, 0]
+            # That way each metric has an equal chance to "win", unless
+            # they pick a differen
+            standardized_metrics = metrics.sub(metrics.min()).divide(
+                metrics.max() - metrics.min())
+            
             # Weighted sum
             overall_metrics = (
-                .4 * metrics['alignment'] +
-                .4 * metrics['geometry']
+                .5 * standardized_metrics['alignment'] +
+                .5 * standardized_metrics['geometry']
             )
             
             # Choose the best alignment
@@ -659,10 +667,14 @@ class Classifier(object):
                     oracular_constraint_tests['interwhisker_costs_by_alignment'],
                     ]).T
                 
+                oracular_standardized_metrics = oracular_metrics.sub(
+                    oracular_metrics.min()).divide(
+                    oracular_metrics.max() - oracular_metrics.min())
+
                 # Weighted sum
                 oracular_overall_metrics = (
-                    .5 * oracular_metrics['alignment'] +
-                    .5 * oracular_metrics['geometry']
+                    .5 * oracular_standardized_metrics['alignment'] +
+                    .5 * oracular_standardized_metrics['geometry']
                 )
                 
                 # Choose the best alignment
@@ -683,6 +695,8 @@ class Classifier(object):
                 'cost': best_choice_llik,
                 'n_alignments': len(alignments),
                 'metrics_of_best': metrics.iloc[best_choice_idx],
+                'std_metrics_of_best': standardized_metrics.iloc[
+                    best_choice_idx],
             })
             
             # The vote of each metric
@@ -704,6 +718,8 @@ class Classifier(object):
                     'n_alignments': len(oracular_alignments),
                     'metrics_of_best': oracular_metrics.iloc[
                         oracular_best_choice_idx],
+                    'std_metrics_of_best': oracular_standardized_metrics.iloc[
+                        oracular_best_choice_idx],                        
                 })
                 
                 # The vote of each metric
