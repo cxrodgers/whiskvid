@@ -371,6 +371,7 @@ class Classifier(object):
                     alignments,
                     self.oracular_interwhisker_distrs, 
                     self.streak2object_ser,
+                    key='color_group',
                 )
             )
             alignment_costs.name = 'alignment'

@@ -6,20 +6,29 @@ import scipy.stats
 import base
 
 def update_relationships2(mwe, drop_same=False, drop_nan=True, key='object'):
+    """Within each frame, merge on key and apply vectorized_ls_dist
+
+    drop_same : if True, drop rows where the same object is keyed on itself
+    drop_nan : if True, drop rows where 'dist' is nan
+        This occurs if they share no overlap in x
+    
+    Returns: DataFrame with columns 'frame', key0, key1, and 'dist'
+        'dist' is the distance between each pair of rows in mwe
+    """
     ## More efficient ls_dist
+    key0 = key + '0'
+    key1 = key + '1'
+    
     # Keep only the non-null objects, and the relevant geometry
-    mwe2 = mwe.loc[~mwe['object'].isnull(), 
+    mwe2 = mwe.loc[~mwe[key].isnull(), 
         ['tip_x', 'tip_y', 'fol_x', 'fol_y', 'frame', key]]
     
-    # Rename key to object
-    mwe2 = mwe2.rename(columns={key: 'object'})
-
     # Merge with itself, suffixing with 0 and 1
     merged = mwe2.merge(mwe2, on='frame', suffixes=('0', '1'))
 
     # Optionally drop same-object
     if drop_same:
-        merged = merged.loc[merged['object0'] != merged['object1']]
+        merged = merged.loc[merged[key0] != merged[key1]]
 
     # Vectorize
     merged['dist'] = base.vectorized_ls_dist(merged)
@@ -29,7 +38,7 @@ def update_relationships2(mwe, drop_same=False, drop_nan=True, key='object'):
         merged = merged.loc[~merged['dist'].isnull()]
     
     # Keep only some columns
-    return merged[['frame', 'object0', 'object1', 'dist']]
+    return merged[['frame', key0, key1, 'dist']]
 
 def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
     distrs, streak2object_ser,
@@ -68,41 +77,50 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
     # Take all data from each streak in `next_frame_streaks`
     streak_data = mwe.loc[mwe['streak'].isin(next_frame_streaks)]
     
-    # Iterate over all such frames and construct probe_distrs
-    rec_l = []
-    for frame, frame_data in streak_data.groupby('frame'):
-        # All pairs of streaks within this frame
-        for idx0 in range(len(frame_data)):
-            for idx1 in range(len(frame_data)):
-                # Skip same guy
-                if idx0 == idx1:
-                    continue
-                
-                # Calculate distance between this pair
-                dist = base.ls_dist(
-                    frame_data['tip_x'].iloc[idx0],
-                    frame_data['tip_y'].iloc[idx0],
-                    frame_data['fol_x'].iloc[idx0],
-                    frame_data['fol_y'].iloc[idx0],
-                    frame_data['tip_x'].iloc[idx1],
-                    frame_data['tip_y'].iloc[idx1],
-                    frame_data['fol_x'].iloc[idx1],
-                    frame_data['fol_y'].iloc[idx1],
-                )
-                
-                # Append distance between each pair
-                rec_l.append((frame, 
-                    frame_data['streak'].iloc[idx0], 
-                    frame_data['streak'].iloc[idx1], 
-                    dist))
-    probe_distrs = pandas.DataFrame.from_records(rec_l, 
-        columns=['frame', 'streak0', 'streak1', 'dist'])
+    method = 'fast'
+    
+    if method == 'old':
+        # Iterate over all such frames and construct probe_distrs
+        rec_l = []
+        for frame, frame_data in streak_data.groupby('frame'):
+            # All pairs of streaks within this frame
+            for idx0 in range(len(frame_data)):
+                for idx1 in range(len(frame_data)):
+                    # Skip same guy
+                    if idx0 == idx1:
+                        continue
+                    
+                    # Calculate distance between this pair
+                    dist = base.ls_dist(
+                        frame_data['tip_x'].iloc[idx0],
+                        frame_data['tip_y'].iloc[idx0],
+                        frame_data['fol_x'].iloc[idx0],
+                        frame_data['fol_y'].iloc[idx0],
+                        frame_data['tip_x'].iloc[idx1],
+                        frame_data['tip_y'].iloc[idx1],
+                        frame_data['fol_x'].iloc[idx1],
+                        frame_data['fol_y'].iloc[idx1],
+                    )
+                    
+                    # Append distance between each pair
+                    rec_l.append((frame, 
+                        frame_data['streak'].iloc[idx0], 
+                        frame_data['streak'].iloc[idx1], 
+                        dist))
+        probe_distrs = pandas.DataFrame.from_records(rec_l, 
+            columns=['frame', 'streak0', 'streak1', 'dist'])
 
-    # mean over all frame for each object
-    # this is the mean relative distance between all pairs of streaks
-    # should probably take all actual sample points, because some objects may
-    # have many more data than others
-    pd_mean = probe_distrs.groupby(['streak0', 'streak1'])['dist'].mean()
+        # mean over all frame for each object
+        # this is the mean relative distance between all pairs of streaks
+        # should probably take all actual sample points, because some objects may
+        # have many more data than others
+        pd_mean = probe_distrs.groupby(['streak0', 'streak1'])['dist'].mean()
+    
+    elif method == 'fast':
+        # More efficient
+        probe_distrs = update_relationships2(
+            streak_data, drop_same=True, drop_nan=True, key='streak')
+        pd_mean = probe_distrs.groupby(['streak0', 'streak1'])['dist'].mean()
 
     
     ## Now compare every pair of streaks, to every pair of known objects in distrs
