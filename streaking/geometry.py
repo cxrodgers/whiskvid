@@ -11,19 +11,7 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     geometry_model_columns : list of columns in mwe to incorporate into
         the geometric model
     key : the columns containing the known labels
-    
-    # calculate distrs over fol_x, fol_y, tip_x, tip_y for each object
-    f, ax = plt.subplots()
-    objects = map(int, list(mwe.object.dropna().unique()))
-    colorbar = my.plot.generate_colorbar(len(objects))
-    for n_object, (object, subdata) in enumerate(mwe.groupby('object')):
-        color = colorbar[n_object]
-        ax.plot(subdata['tip_x'], subdata['tip_y'], ',', color=color, ms=3)
-        ax.plot(subdata['fol_x'], subdata['fol_y'], ',', color=color, ms=3)
-    whiskvid.plotting.set_axis_for_image(ax, 800, 800)
-    for n_color, color in enumerate(colorbar):
-        f.text(.9, .9 - n_color * .05, str(n_color), color=color)
-    plt.show()
+    model_typ : 'nb' for Naive Bayes or 'sgd' for SGDClassifier
     
     Returns: model, scaler
         This is an SGD model that takes geometric inputs, and predicts
@@ -65,10 +53,28 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     return model, scaler
 
 def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
-    geometry_model_columns, geometry_scaler):
+    geometry_model_columns, geometry_scaler, cost_floor=-6):
     """Measure geometry costs
     
+    mwe : the data
+    model, geometry_scaler : from update_geometry
+    next_frame_streaks : streaks in next frame to consider
+    alignments : alignments to consider
+    geometry_model_columns : columns from mwe to feed to model
+    
+    This computes the cost of assigning each streak to each possible
+    object. Cost is assessed using model.predict_log_proba. The cost of
+    each alignment is the sum of all its contained assignments, after
+    flooring the cost of every alignment at `cost_floor`.
+    
     Returns: geometry_costs, geometry_costs_by_alignment
+        geometry_costs : DataFrame
+            The index is every streak in `next_frame_streaks`, and the
+            columns are every object in the classifier. The values are
+            the costs of making that assignment.
+        geometry_costs_by_alignment : Series
+            The index is the alignment number, and the value is the total
+            cost for that alignment.
     """
     geometry_costs_l = []
     for streak_to_fit in next_frame_streaks:
@@ -95,10 +101,14 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
     geometry_costs.index.name = 'streak'
     geometry_costs.columns.name = 'object'
 
+    # Floor the cost
+    geometry_costs2 = geometry_costs.copy()
+    geometry_costs2[geometry_costs2 < cost_floor] = cost_floor
+
     # Calculate a geometric cost for every alignment
     # This is just the sum of the costs of all included assignments
     geometry_costs_by_alignment = pandas.Series([
-        np.sum([geometry_costs.loc[streak, obj] for obj, streak in alignment]) 
+        np.sum([geometry_costs2.loc[streak, obj] for obj, streak in alignment]) 
         for alignment in alignments],
         index=range(len(alignments)))
     geometry_costs_by_alignment.name = 'geometry'
