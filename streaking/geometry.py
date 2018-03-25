@@ -2,6 +2,8 @@ import numpy as np
 import pandas
 import sklearn.linear_model
 import sklearn.naive_bayes
+import sklearn.calibration
+import sklearn.model_selection
 
 
 def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
