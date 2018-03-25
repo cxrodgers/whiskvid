@@ -46,11 +46,19 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     scaler = sklearn.preprocessing.StandardScaler()
     scaler.fit(input_data)
     scaled_data = scaler.transform(input_data)
+    
+    # Reserve some data for calibration
+    cv = sklearn.model_selection.StratifiedKFold(n_splits=3, shuffle=True)
+    
+    # Fit with calibration
+    calibrated_model = sklearn.calibration.CalibratedClassifierCV(
+        model, cv=cv, method='sigmoid')
+    calibrated_model.fit(scaled_data, output_data)
 
     # Fit from geometry to object label
-    model.fit(scaled_data, output_data)
+    #~ model.fit(scaled_data, output_data)
     
-    return model, scaler
+    return calibrated_model, scaler
 
 def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
     geometry_model_columns, geometry_scaler, cost_floor=-6):
@@ -87,7 +95,7 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
         
         # Predict the probability of the streak data
         # This has shape (len(stf_data), len(model.classes_))
-        stf_log_proba = model.predict_log_proba(scaled_stf_data)
+        stf_log_proba = np.log10(model.predict_proba(scaled_stf_data))
         
         # Mean over every frame in the observed streak
         mean_stf_log_proba = stf_log_proba.mean(0)
@@ -103,7 +111,8 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
 
     # Floor the cost
     geometry_costs2 = geometry_costs.copy()
-    geometry_costs2[geometry_costs2 < cost_floor] = cost_floor
+    if cost_floor is not None:
+        geometry_costs2[geometry_costs2 < cost_floor] = cost_floor
 
     # Calculate a geometric cost for every alignment
     # This is just the sum of the costs of all included assignments
