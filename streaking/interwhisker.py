@@ -33,15 +33,21 @@ def update_relationships2(mwe, drop_same=False, drop_nan=True, key='object'):
 
 def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
     distrs, streak2object_ser,
-    min_data_count=50, pval_floor=1e-6, clamp_std=10,
+    min_data_count=50, cost_floor=-6, clamp_std=10,
     verbose=True, key='object',
     ):
     """Test all possible alignments for streaks to known objects for ordering.
     
     mwe : mwe
     next_frame_streaks : list of streaks to test
+    alignments : alignments to test
     distrs : stored information about inter-object distance distributions
     streak2object_ser : Series, index known streaks, values labeled objects
+    min_data_count : if there are fewer than this many pairs, assumed
+        standard deviation is `clamp_std`
+    clamp_std : lower limit on standard deviation of each pair
+    cost_floor : floor on cost for each possible assignment
+    key : how to identify the object within each pair
     
     We define `streaks_to_assign` as the values in `next_frame_streaks`
     which are not in the index of `streak2object_ser`. We define
@@ -54,8 +60,10 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
     its assignment pairs, of the log(p-value) of observing that inter-streak
     distance assuming they came from that inter-object distance distribution.
     
-    Returns: alignments, alignment_costs
-        
+    Returns: llik_ser, alignment_llik_df, alignment_costs
+        llik_ser : The cost of each possible assignment
+        alignment_llik_df : The cost of each assignment in each alignment
+        alignment_costs : Sum cost of each alignment        
     """
     # Take all data from each streak in `next_frame_streaks`
     streak_data = mwe.loc[mwe['streak'].isin(next_frame_streaks)]
@@ -125,7 +133,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
         normprobe = normprobe.divide(sdist)
         
         # CDF it
-        logp_probe = np.log10(pval_floor + 2 * (1 - scipy.stats.norm.cdf(
+        logp_probe = np.log10(2 * (1 - scipy.stats.norm.cdf(
             np.abs(normprobe.values))))
         logp_probe = pandas.DataFrame(logp_probe, index=normprobe.index,
             columns=normprobe.columns)
@@ -158,7 +166,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
                 
                 # Calculate p-value of data
                 normalized_value = (streak_dist - mdist) / sdist
-                llik = np.log10(pval_floor + 2 * (1 - scipy.stats.norm.cdf(
+                llik = np.log10(2 * (1 - scipy.stats.norm.cdf(
                     np.abs(normalized_value))))
                 
                 # Store
@@ -174,6 +182,10 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
 
 
     ## Cost of each alignment
+    # Floor llik_ser
+    llik_ser2 = llik_ser.copy()
+    llik_ser2[llik_ser2 < cost_floor] = cost_floor
+    
     method = 'fast' # 'old'
     if method == 'fast':
         # For efficiency, first get idxs, then do one lookup
@@ -195,7 +207,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
         # One lookup
         # This line dominates the running time, at least when there are
         # many realignments
-        vals = llik_ser.loc[all_idxs].values
+        vals = llik_ser2.loc[all_idxs].values
         
         # DataFrame it
         alignment_llik_df = pandas.DataFrame.from_records(all_idxs,
@@ -210,7 +222,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
             all_node_pairs = itertools.combinations(alignment, 2)
             alignment_sum = 0
             for (object0, streak0), (object1, streak1) in all_node_pairs:
-                llik = llik_ser.loc[streak0, streak1, object0, object1]
+                llik = llik_ser2.loc[streak0, streak1, object0, object1]
                 alignment_llik_l.append((streak0, streak1, object0, object1,
                     n_alignment, llik))
         alignment_llik_df = pandas.DataFrame.from_records(alignment_llik_l,
