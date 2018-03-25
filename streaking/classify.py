@@ -643,10 +643,9 @@ class Classifier(object):
             
             # Account for the differing dynamic ranges of each metric
             # Simply standardize each to [-1, 0]
-            # That way each metric has an equal chance to "win", unless
-            # they pick a differen
             standardized_metrics = metrics.sub(metrics.min()).divide(
                 metrics.max() - metrics.min())
+            standardized_metrics[standardized_metrics.isnull()] = 1.0
             
             # Weighted sum
             overall_metrics = (
@@ -670,6 +669,8 @@ class Classifier(object):
                 oracular_standardized_metrics = oracular_metrics.sub(
                     oracular_metrics.min()).divide(
                     oracular_metrics.max() - oracular_metrics.min())
+                oracular_standardized_metrics[
+                    oracular_standardized_metrics.isnull()] = 1.0
 
                 # Weighted sum
                 oracular_overall_metrics = (
