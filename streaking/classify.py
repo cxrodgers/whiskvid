@@ -4,7 +4,6 @@ import clumping
 import geometry
 import interwhisker
 import animation
-import smoothness
 
 def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
     streak2object_ser, key='object'):
@@ -295,9 +294,6 @@ class Classifier(object):
             'interwhisker_costs_lookup_series':
             'geometry_costs_by_alignment':
             'geometry_costs_by_assignment':
-            'smoothness_costs_by_alignment':
-            'smoothness_costs_by_assignment':
-            'smoothness_costs_lookup_dist_df':
         """
         ## Test ordering
         if self.verbosity >= 2:
@@ -358,33 +354,6 @@ class Classifier(object):
                 )
             )            
         
-
-        ## Test smoothness
-        if self.verbosity >= 2:
-            print "measuring smoothness costs"
-        
-        if oracular:
-            (smoothness_costs, smoothness_costs_by_alignment, 
-                all_smoothness_dists) = smoothness.measure_smoothness_costs(
-                    self.classified_data,
-                    streaks_in_frame,
-                    alignments,
-                    self.current_frame,
-                    key='color_group_test',
-                )
-            smoothness_costs.name = 'smoothness'
-        
-        else:
-            (smoothness_costs, smoothness_costs_by_alignment, 
-                all_smoothness_dists) = smoothness.measure_smoothness_costs(
-                    self.classified_data,
-                    streaks_in_frame,
-                    alignments,
-                    self.current_frame,
-                )
-            smoothness_costs.name = 'smoothness'            
-        
-
         return {
             'alignments': alignments,
             'interwhisker_costs_by_alignment': alignment_costs,
@@ -392,9 +361,6 @@ class Classifier(object):
             'interwhisker_costs_lookup_series': llik_ser,
             'geometry_costs_by_alignment': geometry_costs_by_alignment,
             'geometry_costs_by_assignment': geometry_costs,
-            'smoothness_costs_by_alignment': smoothness_costs,
-            'smoothness_costs_by_assignment': smoothness_costs_by_alignment,
-            'smoothness_costs_lookup_dist_df': all_smoothness_dists,
         }
     
     def do_assignment(self, best_alignment, best_choice_llik):
@@ -591,54 +557,19 @@ class Classifier(object):
             
             
             ## Test all constraints
-            # Determine whether it's worth calculating smoothness
-            # Smoothness can only be calculated for objects that are both in
-            # `available_objects` and `objects_in_previous_frame`, in other words,
-            # objects corresponding to streaks that just ended.
-            # Otherwise it's just going to return the disappearing object penalty
-            # for all unfixed assignments, and the same penalty for all fixed
-            # assignments
-            worth_measuring_smoothness = np.in1d(
-                streaks_and_objects['objects_in_previous_frame'], 
-                streaks_and_objects['available_objects'],
-            ).any()
-            
             # Test the constraints
             constraint_tests = self.test_all_constraints(alignments, 
                 streaks_and_objects['streaks_in_frame'],
             )
 
-            # Debugging check
-            ctscba = constraint_tests['smoothness_costs_by_alignment'].values
-            all_smoothness_same = np.allclose(
-                ctscba - ctscba[0],
-                np.zeros_like(ctscba)
-            )
-            assert worth_measuring_smoothness == (not all_smoothness_same)
-            
             # Repeat for oracular
             if use_oracular:
-                oracular_worth_measuring_smoothness = np.in1d(
-                    oracular_streaks_and_objects['objects_in_previous_frame'], 
-                    oracular_streaks_and_objects['available_objects'],
-                ).any()
-                
                 # Test the constraints
                 oracular_constraint_tests = self.test_all_constraints(
                     oracular_alignments, 
                     oracular_streaks_and_objects['streaks_in_frame'],
                     oracular=True,
                 )
-
-                # Debugging check
-                ctscba = oracular_constraint_tests[
-                    'smoothness_costs_by_alignment'].values
-                oracular_all_smoothness_same = np.allclose(
-                    ctscba - ctscba[0],
-                    np.zeros_like(ctscba)
-                )
-                assert oracular_worth_measuring_smoothness == (
-                    not oracular_all_smoothness_same)            
             
             
             ## Combine geometry and alignment metrics
@@ -646,12 +577,10 @@ class Classifier(object):
             metrics = pandas.DataFrame([
                 constraint_tests['geometry_costs_by_alignment'],
                 constraint_tests['interwhisker_costs_by_alignment'],
-                constraint_tests['smoothness_costs_by_alignment'],
                 ]).T
             
             # Weighted sum
             overall_metrics = (
-                .2 * metrics['smoothness'] +
                 .4 * metrics['alignment'] +
                 .4 * metrics['geometry']
             )
@@ -667,14 +596,12 @@ class Classifier(object):
                 oracular_metrics = pandas.DataFrame([
                     oracular_constraint_tests['geometry_costs_by_alignment'],
                     oracular_constraint_tests['interwhisker_costs_by_alignment'],
-                    oracular_constraint_tests['smoothness_costs_by_alignment'],
                     ]).T
                 
                 # Weighted sum
                 oracular_overall_metrics = (
-                    .2 * oracular_metrics['smoothness'] +
-                    .4 * oracular_metrics['alignment'] +
-                    .4 * oracular_metrics['geometry']
+                    .5 * oracular_metrics['alignment'] +
+                    .5 * oracular_metrics['geometry']
                 )
                 
                 # Choose the best alignment
@@ -699,10 +626,6 @@ class Classifier(object):
             
             # The vote of each metric
             for metric in metrics.columns:
-                # Skip worthless metric
-                if metric == 'smoothness' and not worth_measuring_smoothness:
-                    continue
-                
                 metric_vote = alignments[metrics[metric].idxmax()]
                 metric_vote2 = pandas.Series(*np.transpose(metric_vote), 
                     name='object').loc[
@@ -725,9 +648,6 @@ class Classifier(object):
                 # The vote of each metric
                 for metric in oracular_metrics.columns:
                     # Skip worthless metric
-                    if metric == 'smoothness' and not oracular_worth_measuring_smoothness:
-                        continue
-                    
                     oracular_metric_vote = oracular_alignments[
                         oracular_metrics[metric].idxmax()]
                     oracular_metric_vote2 = pandas.Series(
