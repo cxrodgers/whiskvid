@@ -5,6 +5,69 @@ import geometry
 import interwhisker
 import animation
 
+def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
+    """Define all possible alignments from objects to streaks
+    
+    next_frame_streaks : streaks to consider
+    streak2object_ser : already defined relationships
+    
+    First we figure out which streaks need to be assigned versus are
+    already assigned. Then we figure out which objects are available. Then
+    we figure out all alignments, which consists of a series of assignments.
+    
+    Returns: alignments, a list of length N
+        N = all possible combinations between available objects and streaks
+        to assign.
+    """
+    
+    ## Which streaks need to be assigned
+    # These streaks have already been assigned
+    pre_assigned_streaks = streak2object_ser.reindex(
+        next_frame_streaks).dropna().astype(np.int)
+
+    # Identify which streaks need to be assigned
+    streaks_to_assign = [streak for streak in next_frame_streaks
+        if streak not in streak2object_ser.index]
+    
+    
+    ## Which objects are available for assignment
+    # Identify which objects are available
+    available_objects = [obj for obj in streak2object_ser.unique()
+        if obj not in pre_assigned_streaks.values]
+    
+    print "need to assign %r to %r;\n%r already assigned to %r" % (
+        streaks_to_assign, available_objects, 
+        pre_assigned_streaks.index, pre_assigned_streaks.values,
+    )
+    
+    if len(streaks_to_assign) > len(available_objects):
+        1/0
+    
+    ## Define alignments from objects to streaks
+    # Pre-assigned streaks
+    pre_assigned_assignments = zip(
+        pre_assigned_streaks.values,
+        pre_assigned_streaks.index.values,
+    )
+    
+    if len(available_objects) < len(streaks_to_assign):
+        # More streaks than objects, need to add a new object
+        1/0
+        
+    else:
+        # More objects than streaks, or the same number
+        # All streaks_to_assign-length permutations of available_objects
+        permuted_objects_l = itertools.permutations(
+            available_objects, len(streaks_to_assign))
+        
+        # Zip them up with streaks_to_assign, appending fixed assignments
+        alignments = [
+            zip(permuted_objects, streaks_to_assign) + pre_assigned_assignments
+            for permuted_objects in permuted_objects_l
+        ]
+    
+    return alignments
+
 def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
     streak2object_ser, key='object'):
     """Pick out streaks to assign and available objects
@@ -542,13 +605,13 @@ class Classifier(object):
             
             
             ## Define possible alignments
-            alignments = interwhisker.define_alignments(
+            alignments = define_alignments(
                 streaks_and_objects['streaks_in_frame'],
                 self.streak2object_ser,
             )
             
             if use_oracular:
-                oracular_alignments = interwhisker.define_alignments(
+                oracular_alignments = define_alignments(
                     oracular_streaks_and_objects['streaks_in_frame'],
                     test_oracular_streak2object_ser,
                 )                
