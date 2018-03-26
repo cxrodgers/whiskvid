@@ -138,7 +138,10 @@ def choose_next_frame(mwe, current_frame):
     
 
 def find_frame_with_most_simultaneous_streaks(mwe):
-    """Returns frame with most simultaneous streaks"""
+    """Returns frame with most simultaneous streaks
+    
+    Also inserts streak_length into mwe
+    """
     # insert length of streaks
     streak_length = mwe['streak'].value_counts().sort_index()
     mwe['streak_length'] = streak_length.loc[mwe['streak']].values
@@ -486,7 +489,8 @@ class Classifier(object):
             given a curated (best-case) model and an actual model.
         """
         ## Clump
-        self.clump()
+        if not hasattr(self, 'clumped_data'):
+            self.clump()
 
 
         ## Choose starting point 
