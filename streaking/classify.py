@@ -594,9 +594,11 @@ class Classifier(object):
             
             # Skip if no work
             if len(streaks_and_objects['unassigned_streaks']) == 0:
+                next_frame = choose_next_frame(self.classified_data, 
+                    self.current_frame)                
                 if self.verbosity >= 2:
                     print "skipping frame,", self.current_frame
-                self.current_frame += 1
+                self.current_frame = next_frame
                 continue
             
             # Print status
@@ -707,7 +709,13 @@ class Classifier(object):
             
             # The vote of each metric
             for metric in metrics.columns:
-                metric_vote = alignments[metrics[metric].idxmax()]
+                best_row = metrics[metric].idxmax()
+                if np.isnan(best_row):
+                    # This happens when all alignments are NaN
+                    # For instance, if there is only one assignment per
+                    # alignment
+                    continue
+                metric_vote = alignments[best_row]
                 metric_vote2 = pandas.Series(*np.transpose(metric_vote), 
                     name='object').loc[
                     streaks_and_objects['unassigned_streaks']
