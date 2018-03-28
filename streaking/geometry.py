@@ -54,7 +54,7 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     
     # Fit with calibration
     calibrated_model = sklearn.calibration.CalibratedClassifierCV(
-        model, cv=cv, method='sigmoid')
+        model, cv=cv, method='isotonic')
     calibrated_model.fit(scaled_data, output_data)
 
     # Fit from geometry to object label
