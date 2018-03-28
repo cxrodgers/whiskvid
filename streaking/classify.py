@@ -167,39 +167,44 @@ def find_frame_with_most_simultaneous_streaks(mwe):
     
     return frame_start
 
-def determine_initial_ordering(mwe, frame_start):
-    """Initalize `object` column in `mwe` based on `frame_start`
+def initialize_classified_data(clumped_data, keystone_frame):
+    """Initialize `object` column in `clumped_data` based on `keystone_frame`
     
-    Identifies streaks at frame `frame_start`. Each streak is given an
+    Identifies streaks at frame `keystone_frame`. Each streak is given an
     object label, ordered by their relative distances.
     
-    Returns: 
-        streak2object_ser
-        mwe, now with `object` column
+    Returns: `classified_data`
+        This is a copy of `clumped_data`, now with `object` column
     """
-    mwe = mwe.copy()
+    classified_data = clumped_data.copy()
     
     ## Define the objects
+    if keystone_frame not in classified_data['frame'].values:
+        raise ValueError("clumped data must include keystone frame")
+    
     # streaks in frame_start
-    streaks_in_frame_start = list(mwe[mwe.frame == frame_start][
+    streaks_in_keystone_frame = list(
+        classified_data[classified_data.frame == keystone_frame][
         'streak'].values)
 
     # object labels, for now assume always integer strating with 0
-    known_object_labels = list(range(len(streaks_in_frame_start)))
+    known_object_labels = list(range(len(streaks_in_keystone_frame)))
 
     # create 'object' column and label these streaks
-    mwe['object'] = mwe['streak'].replace(
-        to_replace=streaks_in_frame_start, 
+    classified_data['object'] = classified_data['streak'].replace(
+        to_replace=streaks_in_keystone_frame, 
         value=known_object_labels,
     )
 
     # unknown objects are labeled with np.nan
-    mwe.loc[~mwe['streak'].isin(streaks_in_frame_start), 'object'] = np.nan
+    classified_data.loc[
+        ~classified_data['streak'].isin(streaks_in_keystone_frame), 
+        'object'] = np.nan
 
 
     ## Reorder object by distance
     # Estimate distances
-    distrs_temp = interwhisker.update_relationships2(mwe)
+    distrs_temp = interwhisker.update_relationships2(classified_data)
 
     # mean distance between each object
     mean_dist_between_objects = distrs_temp.pivot_table(
@@ -209,20 +214,21 @@ def determine_initial_ordering(mwe, frame_start):
     ordered_whiskers = mean_dist_between_objects.mean().argsort().values
 
     # Re-order everything
-    # Take `streaks_in_frame_start` in the order specified by `ordered_whiskers`
-    ordered_sifs = np.array(streaks_in_frame_start)[ordered_whiskers]
+    # Take `streaks_in_keystone_frame` in the order specified by `ordered_whiskers`
+    ordered_sifs = np.array(streaks_in_keystone_frame)[ordered_whiskers]
 
     # Repeat the code above for setting object column
-    mwe['object'] = mwe['streak'].replace(
+    classified_data['object'] = classified_data['streak'].replace(
         to_replace=ordered_sifs,
         value=known_object_labels,
     )
-    mwe.loc[~mwe['streak'].isin(ordered_sifs), 'object'] = np.nan
+    classified_data.loc[
+        ~classified_data['streak'].isin(ordered_sifs), 'object'] = np.nan
 
-    # This is the mapping between streaks and objects
-    streak2object_ser = pandas.Series(known_object_labels, ordered_sifs)
+    #~ # This is the mapping between streaks and objects
+    #~ streak2object_ser = pandas.Series(known_object_labels, ordered_sifs)
 
-    return streak2object_ser, mwe
+    return classified_data
 
 
 class Classifier(object):
@@ -481,8 +487,44 @@ class Classifier(object):
             'votes_df': self.get_votes_df(),
         }
 
-    def run(self, use_oracular=True):
+    def set_initial_ordering(self, keystone_frame):
+        """Initialize the object identities from a keystone frame
+        
+        `keystone_frame` should be a frame that has the most number of
+        simultaneous streaks as any frame in the video. The objects in this
+        frame will be ordered and this will define the object id for the
+        rest of the classification.
+        
+        This will overwite the attributes `classified_data` and 
+        `streak2object_ser` if they exist!
+        """
+        # Initialize classified data based on the keystone frame
+        self.classified_data = initialize_classified_data(self.clumped_data, 
+            keystone_frame)
+        
+        # Set `streak2object_ser` based on `self.classified_data`
+        self.generate_streak2object_ser()
+
+    def generate_streak2object_ser(self):
+        """Generate streak2object_ser from classified_data"""
+        self.streak2object_ser = self.classified_data[
+            ['object', 'streak']].dropna().drop_duplicates(
+            'streak').astype(np.int).set_index('streak')[
+            'object'].sort_index()        
+
+    def run(self, frame_start=None, warm_start=None, keystone_frame=None, 
+        use_oracular=False):
         """Run on all frames
+        
+        * If the attribute `clumped_data` is not set, self.clump() is called.
+        * If the attribute `classified_data` is set, then it's a warm start.
+          Otherwise it's a cold start. If it's a cold start, keystone_frame
+          must have been provided and this is use to initialize
+          `classified data`.
+        * If `streak2object_ser` is not set, then it is set by
+          self.generate_streak2object_ser()
+        
+        frame_start : which frame to start on
         
         use_oracular : if True, then also build models based on the
             curated correct answers. This is useful for comparing performance
@@ -494,22 +536,28 @@ class Classifier(object):
 
 
         ## Choose starting point 
-        self.frame_start = find_frame_with_most_simultaneous_streaks(
-            self.clumped_data)
-        
+        if frame_start is not None:
+            self.frame_start = frame_start
+        else:
+            raise ValueError("must specify frame_start")
+
 
         ## Create initial ordering and self.classified_data
         if not hasattr(self, 'classified_data'):
-            self.streak2object_ser, self.classified_data = (
-                determine_initial_ordering(self.clumped_data, self.frame_start)
-            )
-        elif not hasattr(self, 'streak2object_ser'):
-            # regenerate streak2object_ser
-            self.streak2object_ser = self.classified_data[
-                ['object', 'streak']].dropna().drop_duplicates(
-                'streak').astype(np.int).set_index('streak')[
-                'object'].sort_index()
+            # Cold start
+            # Use the keystone frame to set the initial ordering
+            if keystone_frame is None:
+                raise ValueError("must provide keystone frame for cold start")
+            self.set_initial_ordering(keystone_frame)
         
+        else:
+            # Warm start
+            # See if we need to regenerate streak2object_ser
+            if not hasattr(self, 'streak2object_ser'):
+                self.generate_streak2object_ser()
+
+
+        ## Same for oracular
         if use_oracular:
             # The most common color_group assigned to each streak
             # Some streaks may erroneously combine across color groups
