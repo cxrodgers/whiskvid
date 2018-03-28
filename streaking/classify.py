@@ -101,7 +101,7 @@ def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
 
     # Identify objects in previous frame (for smoothness)
     objects_in_previous_frame = mwe.loc[mwe['frame'] == (next_frame - 1),
-        key].astype(np.int).values
+        key].values
 
     res = {
         'unassigned_streaks': streaks_to_assign,
@@ -499,9 +499,16 @@ class Classifier(object):
         
 
         ## Create initial ordering and self.classified_data
-        self.streak2object_ser, self.classified_data = (
-            determine_initial_ordering(self.clumped_data, self.frame_start)
-        )
+        if not hasattr(self, 'classified_data'):
+            self.streak2object_ser, self.classified_data = (
+                determine_initial_ordering(self.clumped_data, self.frame_start)
+            )
+        elif not hasattr(self, 'streak2object_ser'):
+            # regenerate streak2object_ser
+            self.streak2object_ser = self.classified_data[
+                ['object', 'streak']].dropna().drop_duplicates(
+                'streak').astype(np.int).set_index('streak')[
+                'object'].sort_index()
         
         if use_oracular:
             # The most common color_group assigned to each streak
@@ -519,6 +526,7 @@ class Classifier(object):
         ## initialize models
         self.update_geometry_model()
         self.update_interwhisker_model()
+        n_geo_rows_last_update = np.sum(~self.classified_data['object'].isnull())
 
         # Oracular
         if use_oracular:
@@ -761,7 +769,14 @@ class Classifier(object):
 
 
             ## Update models
-            self.update_geometry_model()
+            # Only update if we have enough new data
+            n_geo_rows = np.sum(~self.classified_data['object'].isnull())
+            if n_geo_rows_last_update is None or (
+                n_geo_rows >= 1.01 * n_geo_rows_last_update):
+                # Update the model
+                self.update_geometry_model()
+                n_geo_rows_last_update = n_geo_rows
+            
             self.update_interwhisker_model()            
 
             # Oracular
