@@ -36,11 +36,14 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
     available_objects = [obj for obj in streak2object_ser.unique()
         if obj not in pre_assigned_streaks.values]
     
-    print "need to assign %r to %r;\n%r already assigned to %r" % (
-        streaks_to_assign, available_objects, 
-        pre_assigned_streaks.index, pre_assigned_streaks.values,
-    )
-    
+    if verbose:
+        print "info: need to assign %r to %r" % (
+            streaks_to_assign, available_objects)
+        print "info: %r already assigned to %r" % (
+            list(pre_assigned_streaks.index.values), 
+            list(pre_assigned_streaks.values),
+        )
+
     if len(streaks_to_assign) > len(available_objects):
         1/0
     
@@ -438,7 +441,7 @@ class Classifier(object):
     def do_assignment(self, best_alignment, best_choice_llik):
         """Actually assign the best alignment"""
         # assign
-        if self.verbosity >= 1:
+        if self.verbosity >= 2:
             print "assigning %r, llik %g" % (best_alignment, best_choice_llik)
         
         # Actually assign
@@ -672,6 +675,7 @@ class Classifier(object):
             alignments = define_alignments(
                 streaks_and_objects['streaks_in_frame'],
                 self.streak2object_ser,
+                verbose=(self.verbosity >= 2),
             )
             
             if use_oracular:
