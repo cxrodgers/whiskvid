@@ -5,6 +5,7 @@ import clumping
 import smoothness
 import classify
 import base
+import curation
 
 reload(geometry)
 reload(interwhisker)
@@ -13,3 +14,4 @@ reload(clumping)
 reload(smoothness)
 reload(classify)
 reload(base)
+reload(curation)

@@ -4,6 +4,8 @@ import numpy as np
 import my
 import my.plot
 import my.video
+import whiskvid
+import tables
 
 def plot_single_frame(frame_data, ax, vs, frame_number, ds_ratio=2, 
     colors=None, key='object'):
@@ -144,7 +146,7 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
 
         # Get data from this frame
         if frame_data is None:
-            frame_data = my.pick_rows(classifier.classified_data, 
+            frame_data = my.pick_rows(classified_data, 
                 frame=key_frame).copy()
 
         # Load results if there are any
