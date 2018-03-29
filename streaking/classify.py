@@ -667,7 +667,7 @@ class Classifier(object):
                     streaks_and_objects['available_objects'],
                 )
                 print "info: streaks %r already assigned" % (
-                    streaks_and_objects['assigned_streaks'],
+                    list(streaks_and_objects['assigned_streaks'].values),
                 )
             
             
