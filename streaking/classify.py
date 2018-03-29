@@ -335,29 +335,10 @@ class Classifier(object):
             Currently overwritten
         
         Returns: dict
-            'alignments':
-            'interwhisker_costs_by_alignment': 
-            'interwhisker_costs_by_assignment':
-            'interwhisker_costs_lookup_series':
+            'alignments': the alignments again
             'geometry_costs_by_alignment':
             'geometry_costs_by_assignment':
         """
-        ## Test ordering
-        if self.verbosity >= 2:
-            print "measuring alignment costs"
-        
-        llik_ser, alignment_llik_df, alignment_costs = (
-            interwhisker.test_all_alignments_for_ordering(
-                self.classified_data, 
-                streaks_in_frame, 
-                alignments,
-                self.interwhisker_distrs, 
-                self.streak2object_ser,
-            )
-        )
-        alignment_costs.name = 'alignment'            
-        
-        
         ## Test geometry
         if self.verbosity >= 2:
             print "measuring geometry costs"
@@ -375,9 +356,6 @@ class Classifier(object):
     
         return {
             'alignments': alignments,
-            'interwhisker_costs_by_alignment': alignment_costs,
-            'interwhisker_costs_by_assignment': alignment_llik_df,
-            'interwhisker_costs_lookup_series': llik_ser,
             'geometry_costs_by_alignment': geometry_costs_by_alignment,
             'geometry_costs_by_assignment': geometry_costs,
         }
@@ -496,7 +474,6 @@ class Classifier(object):
 
         ## initialize models
         self.update_geometry_model()
-        self.update_interwhisker_model()
         n_geo_rows_last_update = np.sum(~self.classified_data['object'].isnull())
 
 
@@ -568,7 +545,6 @@ class Classifier(object):
             # Combine metrics
             metrics = pandas.DataFrame([
                 constraint_tests['geometry_costs_by_alignment'],
-                constraint_tests['interwhisker_costs_by_alignment'],
                 ]).T
             
             # Account for the differing dynamic ranges of each metric
@@ -579,7 +555,6 @@ class Classifier(object):
             
             # Weighted sum
             overall_metrics = (
-                .5 * standardized_metrics['alignment'] +
                 .5 * standardized_metrics['geometry']
             )
             
@@ -630,8 +605,6 @@ class Classifier(object):
                 self.update_geometry_model()
                 n_geo_rows_last_update = n_geo_rows
             
-            self.update_interwhisker_model()            
-
 
             ## Animate the decision
             if self.animate:
