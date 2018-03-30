@@ -262,6 +262,10 @@ class Classifier(object):
         # Parameterization that is useful for some things
         self.data['center_x'] = self.data[['fol_x', 'tip_x']].mean(1)
         self.data['center_y'] = self.data[['fol_y', 'tip_y']].mean(1)        
+        
+        # announcements
+        self.frame_announce = 0
+        self.frame_announce_interval = 1000
     
     def clump(self):
         """Clump rows into streaks"""
@@ -463,6 +467,8 @@ class Classifier(object):
         ## Iterate through frames
         # Which frame we're on
         self.current_frame = self.frame_start
+        self.frame_announce = self.frame_announce_interval * (
+            self.current_frame // self.frame_announce_interval)
         
         # Various stuff to keep track of
         self.perf_rec_l = []
@@ -471,8 +477,28 @@ class Classifier(object):
 
         # Loop till break
         while True:
-            if self.verbosity >= 1:
-                print "info: starting frame %d" % self.current_frame
+            ## Announce frame
+            if self.verbosity >= 2:
+                print ("%07d info: starting frame" % self.current_frame)
+            elif self.verbosity >= 1:
+                if self.current_frame >= self.frame_announce:
+                    # Fraction complete
+                    frac_complete = (np.sum(
+                        ~self.classified_data['object'].isnull()) / float(
+                        len(self.classified_data)))
+                        
+                    print ("%07d info: %0.1f%% complete" % (
+                        self.current_frame, 100 * frac_complete))
+
+                    
+                    # Update frame announce
+                    self.frame_announce = self.frame_announce_interval * (1 + 
+                        self.current_frame // self.frame_announce_interval)                    
+                    
+                    # Wraparound issues
+                    if (self.frame_announce > 
+                        self.classified_data['frame'].max()):
+                        self.frame_announce = 0
             
             ## Animate
             if self.animate:
@@ -559,7 +585,7 @@ class Classifier(object):
                 n_geo_rows >= 1.01 * n_geo_rows_last_update):
                 
                 if self.verbosity >= 1:
-                    print ("%010d info: updating geometry model" % 
+                    print ("%07d info: updating geometry model" % 
                         self.current_frame)
                 
                 # Update the model
