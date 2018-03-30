@@ -6,6 +6,7 @@ import interwhisker
 import itertools
 import animation
 import scipy.optimize
+import datetime
 
 def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
     """Define all possible alignments from objects to streaks
@@ -416,6 +417,8 @@ class Classifier(object):
         frame_start : which frame to start on
         
         """
+        self.date_time_start = datetime.datetime.now()
+        
         ## Clump
         if not hasattr(self, 'clumped_data'):
             self.clump()
@@ -483,7 +486,6 @@ class Classifier(object):
                     print ("%07d info: %0.1f%% complete" % (
                         self.current_frame, 100 * frac_complete))
 
-                    
                     # Update frame announce
                     self.frame_announce = self.frame_announce_interval * (1 + 
                         self.current_frame // self.frame_announce_interval)                    
@@ -600,5 +602,7 @@ class Classifier(object):
                 break
             else:
                 self.current_frame = next_frame
+        
+        self.date_time_stop = datetime.datetime.now()
         
         return self.classified_data
