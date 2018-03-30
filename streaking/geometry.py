@@ -62,14 +62,13 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     
     return calibrated_model, scaler
 
-def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
+def measure_geometry_costs(mwe, model, next_frame_streaks, 
     geometry_model_columns, geometry_scaler, cost_floor=-6):
     """Measure geometry costs
     
     mwe : the data
     model, geometry_scaler : from update_geometry
     next_frame_streaks : streaks in next frame to consider
-    alignments : alignments to consider
     geometry_model_columns : columns from mwe to feed to model
     
     This computes the cost of assigning each streak to each possible
@@ -82,9 +81,6 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
             The index is every streak in `next_frame_streaks`, and the
             columns are every object in the classifier. The values are
             the costs of making that assignment.
-        geometry_costs_by_alignment : Series
-            The index is the alignment number, and the value is the total
-            cost for that alignment.
     """
     geometry_costs_l = []
     for streak_to_fit in next_frame_streaks:
@@ -97,7 +93,8 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
         
         # Predict the probability of the streak data
         # This has shape (len(stf_data), len(model.classes_))
-        stf_log_proba = np.log10(model.predict_proba(scaled_stf_data))
+        # The 1e-66 prevents RuntimeWarning
+        stf_log_proba = np.log10(1e-66 + model.predict_proba(scaled_stf_data))
         
         # Mean over every frame in the observed streak
         mean_stf_log_proba = stf_log_proba.mean(0)
@@ -115,13 +112,6 @@ def measure_geometry_costs(mwe, model, next_frame_streaks, alignments,
     geometry_costs2 = geometry_costs.copy()
     if cost_floor is not None:
         geometry_costs2[geometry_costs2 < cost_floor] = cost_floor
-
-    # Calculate a geometric cost for every alignment
-    # This is just the sum of the costs of all included assignments
-    geometry_costs_by_alignment = pandas.Series([
-        np.sum([geometry_costs2.loc[streak, obj] for obj, streak in alignment]) 
-        for alignment in alignments],
-        index=range(len(alignments)))
-    geometry_costs_by_alignment.name = 'geometry'
     
-    return geometry_costs, geometry_costs_by_alignment
+    return geometry_costs
+

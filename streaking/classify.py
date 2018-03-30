@@ -140,8 +140,12 @@ def choose_next_frame(mwe, current_frame):
     return next_frame
     
 
-def find_frame_with_most_simultaneous_streaks(mwe):
+def find_frame_with_most_simultaneous_streaks(mwe, take=-1):
     """Returns frame with most simultaneous streaks
+    
+    take : if -1 take the last one, if -2 take the second to last, etc
+        All will have the same number of streaks, so this is a good way to
+        get a "better" keystone frame.
     
     Also inserts streak_length into mwe
     """
@@ -166,7 +170,7 @@ def find_frame_with_most_simultaneous_streaks(mwe):
         mwe.frame.isin(frames_with_max_streaks)].groupby('frame')[
         'streak_length'].mean().sort_values()
     
-    frame_start = int(mean_streak_length.index[-1])
+    frame_start = int(mean_streak_length.index[take])
     
     return frame_start
 
@@ -327,39 +331,7 @@ class Classifier(object):
 
         if self.verbosity >= 2:
             print "done updating animation"
-
-    def test_all_constraints(self, alignments, streaks_in_frame):
-        """Test all constraints on all possible alignments
-        
-        alignments : alignments to test
-            Currently overwritten
-        
-        Returns: dict
-            'alignments': the alignments again
-            'geometry_costs_by_alignment':
-            'geometry_costs_by_assignment':
-        """
-        ## Test geometry
-        if self.verbosity >= 2:
-            print "measuring geometry costs"
-        
-        geometry_costs, geometry_costs_by_alignment = (
-            geometry.measure_geometry_costs(
-                self.classified_data, 
-                self.geometry_model, 
-                streaks_in_frame,
-                alignments,
-                self.geometry_model_columns, 
-                self.geometry_scaler,
-            )
-        )            
-    
-        return {
-            'alignments': alignments,
-            'geometry_costs_by_alignment': geometry_costs_by_alignment,
-            'geometry_costs_by_assignment': geometry_costs,
-        }
-    
+  
     def do_assignment(self, best_alignment, best_choice_llik):
         """Actually assign the best alignment"""
         # assign
@@ -527,19 +499,20 @@ class Classifier(object):
             
             
             ## Define possible alignments
-            alignments = define_alignments(
-                streaks_and_objects['streaks_in_frame'],
-                self.streak2object_ser,
-                verbose=(self.verbosity >= 2),
-            )
-            
+
 
             ## Test all constraints
-            # Test the constraints
-            constraint_tests = self.test_all_constraints(alignments, 
-                streaks_and_objects['streaks_in_frame'],
-            )
-
+            # Test geometry costs
+            geometry_costs = (
+                geometry.measure_geometry_costs(
+                    self.classified_data, 
+                    self.geometry_model, 
+                    streaks_and_objects['streaks_in_frame'],
+                    self.geometry_model_columns, 
+                    self.geometry_scaler,
+                )
+            )              
+            
             
             ## Combine geometry and alignment metrics
             # Combine metrics
@@ -601,6 +574,11 @@ class Classifier(object):
             n_geo_rows = np.sum(~self.classified_data['object'].isnull())
             if n_geo_rows_last_update is None or (
                 n_geo_rows >= 1.01 * n_geo_rows_last_update):
+                
+                if self.verbosity >= 1:
+                    print ("%010d info: updating geometry model" % 
+                        self.current_frame)
+                
                 # Update the model
                 self.update_geometry_model()
                 n_geo_rows_last_update = n_geo_rows
