@@ -6,7 +6,8 @@ import sklearn.calibration
 import sklearn.model_selection
 
 
-def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
+def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
+    calibrate=True):
     """Model the geometry of known objects in mwe
     
     mwe : mwe
@@ -39,31 +40,59 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb'):
     else:
         1/0
 
-    # Data
+
+    ## Only fit known objects
     model_mask = ~mwe[key].isnull()
-    input_data = mwe.loc[model_mask, geometry_model_columns].values
-    output_data = mwe.loc[model_mask, key].values.astype(np.int)
-
-    # Scale to avoid hanging
-    scaler = sklearn.preprocessing.StandardScaler()
-    scaler.fit(input_data)
-    scaled_data = scaler.transform(input_data)
+    mwe2 = mwe.loc[model_mask].copy()
     
-    # Reserve some data for calibration
-    cv = sklearn.model_selection.StratifiedKFold(n_splits=3, shuffle=True)
-    
-    # Fit with calibration
-    calibrated_model = sklearn.calibration.CalibratedClassifierCV(
-        model, cv=cv, method='isotonic')
-    calibrated_model.fit(scaled_data, output_data)
 
-    # Fit from geometry to object label
-    #~ model.fit(scaled_data, output_data)
-    
-    return calibrated_model, scaler
+    ## Determine angle bins
+    n_bins = 11
+    frame2angle = mwe2.groupby('frame')['frangle'].mean()
+    angle_bins = frame2angle.quantile(np.linspace(0, 1, n_bins)).values
+    angle_bins[0] = -np.inf
+    angle_bins[-1] = np.inf
 
-def measure_geometry_costs(mwe, model, next_frame_streaks, 
-    geometry_model_columns, geometry_scaler, cost_floor=-6):
+    ## Bin data by angle
+    mwe2['frangle_bin'] = pandas.cut(mwe2['frangle'], angle_bins, 
+        labels=False).astype(np.int)
+
+
+    ## Fit separate models for each angle bin
+    fab2model = {}
+    fab2scaler = {}
+    for fab, sub_mwe in mwe2.groupby('frangle_bin'):
+        # Get input and output data
+        input_data = sub_mwe.loc[:, geometry_model_columns].values
+        output_data = sub_mwe.loc[:, key].values.astype(np.int)
+
+        # Scale to avoid hanging
+        scaler = sklearn.preprocessing.StandardScaler()
+        scaler.fit(input_data)
+        scaled_data = scaler.transform(input_data)
+        
+        if calibrate:
+            # Reserve some data for calibration
+            cv = sklearn.model_selection.StratifiedKFold(n_splits=3, shuffle=True)
+            
+            # Fit with calibration
+            model = sklearn.calibration.CalibratedClassifierCV(
+                sklearn.naive_bayes.GaussianNB(), cv=cv, method='isotonic')
+            model.fit(scaled_data, output_data)
+
+        else:
+            # Uncalibrated
+            model.fit(scaled_data, output_data)
+        
+        # Store
+        fab2model[fab] = model
+        fab2scaler[fab] = scaler
+    
+    return angle_bins, fab2model, fab2scaler
+
+def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler, 
+    next_frame_streaks, 
+    geometry_model_columns, cost_floor=-6):
     """Measure geometry costs
     
     mwe : the data
@@ -82,32 +111,53 @@ def measure_geometry_costs(mwe, model, next_frame_streaks,
             columns are every object in the classifier. The values are
             the costs of making that assignment.
     """
-    geometry_costs_l = []
-    for streak_to_fit in next_frame_streaks:
-        # Data for this streak
-        stf_data = mwe.loc[mwe['streak'] == streak_to_fit, 
-            geometry_model_columns].values
-        
-        # Scale
-        scaled_stf_data = geometry_scaler.transform(stf_data)
-        
-        # Predict the probability of the streak data
-        # This has shape (len(stf_data), len(model.classes_))
-        # The 1e-66 prevents RuntimeWarning
-        stf_log_proba = np.log10(1e-66 + model.predict_proba(scaled_stf_data))
-        
-        # Mean over every frame in the observed streak
-        mean_stf_log_proba = stf_log_proba.mean(0)
-
-        # Store
-        geometry_costs_l.append(mean_stf_log_proba)
+    # Insert frangle column
+    mwe['frangle_bin'] = pandas.cut(mwe['frangle'], angle_bins, 
+        labels=False).astype(np.int)    
     
-    # DataFrame it
-    geometry_costs = pandas.DataFrame(np.array(geometry_costs_l),
-        index=next_frame_streaks, columns=model.classes_)
-    geometry_costs.index.name = 'streak'
-    geometry_costs.columns.name = 'object'
+    # Process data of corresponding streaks
+    mwe2 = mwe.loc[mwe['streak'].isin(next_frame_streaks)]
+    
+    # Iterate over frangles
+    geometry_costs_l = []
+    geometry_costs_keys_l = []
+    for fab, sub_mwe in mwe2.groupby('frangle_bin'):
+        # Get corresponding model
+        model = fab2model[fab]
+        scaler = fab2scaler[fab]
+        
+        # Iterate over streaks
+        for streak_to_fit in next_frame_streaks:
+            # Data for this streak
+            stf_data_df = sub_mwe.loc[mwe['streak'] == streak_to_fit, 
+                geometry_model_columns]
+            stf_data = stf_data_df.values
+            if len(stf_data) == 0:
+                continue
+            
+            # Scale
+            scaled_stf_data = scaler.transform(stf_data)
+            
+            # Predict the probability of the streak data
+            # This has shape (len(stf_data), len(model.classes_))
+            # The 1e-66 prevents RuntimeWarning
+            stf_log_proba = np.log10(1e-66 + 
+                model.predict_proba(scaled_stf_data))
+            
+            # Store
+            geometry_costs_l.append(pandas.DataFrame(stf_log_proba,
+                index=stf_data_df.index, columns=model.classes_))
+            geometry_costs_keys_l.append((fab, streak_to_fit))
 
+    # Concat
+    geometry_costs_by_frame = pandas.concat(geometry_costs_l,   
+        keys=geometry_costs_keys_l, 
+        names=['fab', 'streak', 'mwe_index']).fillna(-66)
+    geometry_costs_by_frame.columns.name = 'object'
+
+    # Mean within streak
+    geometry_costs = geometry_costs_by_frame.mean(level=1)
+    
     # Floor the cost
     geometry_costs2 = geometry_costs.copy()
     if cost_floor is not None:

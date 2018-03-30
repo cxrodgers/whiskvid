@@ -284,7 +284,9 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "updating geometry"
         
-        self.geometry_model, self.geometry_scaler = (
+        # Update
+        (self.geometry_angle_bins, self.geometry_fab2model, 
+            self.geometry_fab2scaler) = (
             geometry.update_geometry(
                 self.classified_data,
                 self.geometry_model_columns, 
@@ -372,17 +374,6 @@ class Classifier(object):
             'metric').sort_index()
         
         return votes_df
-
-    def get_state(self):
-        return {
-            'mwe': self.classified_data, 
-            'distrs': self.interwhisker_distrs, 
-            'streak2object_ser': self.streak2object_ser,
-            'model': self.geometry_model,
-            'geometry_model_columns': self.geometry_model_columns,
-            'geometry_scaler': self.geometry_scaler,
-            'votes_df': self.get_votes_df(),
-        }
 
     def set_initial_ordering(self, keystone_frame):
         """Initialize the object identities from a keystone frame
@@ -538,17 +529,23 @@ class Classifier(object):
             geometry_costs = (
                 geometry.measure_geometry_costs(
                     self.classified_data, 
-                    self.geometry_model, 
+                    self.geometry_angle_bins,
+                    self.geometry_fab2model,
+                    self.geometry_fab2scaler,
                     streaks_and_objects['streaks_in_frame'],
                     self.geometry_model_columns, 
-                    self.geometry_scaler,
                 )
             )              
+            
+            # Only some
+            available_objects_in_geo_costs = [obj for obj in 
+                streaks_and_objects['available_objects'] if obj in 
+                geometry_costs.columns]
             
             # Extract out only the available objects and unassigned streaks
             sub_geometry_costs = geometry_costs.loc[
                 streaks_and_objects['unassigned_streaks'],
-                streaks_and_objects['available_objects'],
+                available_objects_in_geo_costs
             ]
             
             # Hungarian on unassigned stuff
