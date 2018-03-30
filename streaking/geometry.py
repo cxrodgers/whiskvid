@@ -117,6 +117,9 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
     # Process data of corresponding streaks
     mwe2 = mwe.loc[mwe['streak'].isin(next_frame_streaks)]
     
+    # Extract all objects, in case they don't come up here
+    all_classes = np.sort(mwe['object'].dropna().astype(np.int).unique())
+    
     # Iterate over frangles
     geometry_costs_l = []
     geometry_costs_keys_l = []
@@ -140,7 +143,7 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
             # Predict the probability of the streak data
             # This has shape (len(stf_data), len(model.classes_))
             # The 1e-66 prevents RuntimeWarning
-            stf_log_proba = np.log10(1e-66 + 
+            stf_log_proba = np.log10(1e-300 + 
                 model.predict_proba(scaled_stf_data))
             
             # Store
@@ -151,8 +154,15 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
     # Concat
     geometry_costs_by_frame = pandas.concat(geometry_costs_l,   
         keys=geometry_costs_keys_l, 
-        names=['fab', 'streak', 'mwe_index']).fillna(-66)
+        names=['fab', 'streak', 'mwe_index'])
     geometry_costs_by_frame.columns.name = 'object'
+    
+    # Reindex by all classes in case it never came up
+    geometry_costs_by_frame = geometry_costs_by_frame.reindex(all_classes, 
+        axis=1)
+    
+    # Fillna in case no data
+    geometry_costs_by_frame = geometry_costs_by_frame.fillna(-300)
 
     # Mean within streak
     geometry_costs = geometry_costs_by_frame.mean(level=1)

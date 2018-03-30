@@ -266,7 +266,7 @@ class Classifier(object):
         
         # announcements
         self.frame_announce = 0
-        self.frame_announce_interval = 1000
+        self.frame_announce_interval = 5000
     
     def clump(self):
         """Clump rows into streaks"""
@@ -523,9 +523,6 @@ class Classifier(object):
                 )
             
             
-            ## Define possible alignments
-
-
             ## Test all constraints
             # Test geometry costs
             geometry_costs = (
@@ -539,16 +536,12 @@ class Classifier(object):
                 )
             )              
             
-            # Only some
-            available_objects_in_geo_costs = [obj for obj in 
-                streaks_and_objects['available_objects'] if obj in 
-                geometry_costs.columns]
-            
             # Extract out only the available objects and unassigned streaks
             sub_geometry_costs = geometry_costs.loc[
                 streaks_and_objects['unassigned_streaks'],
-                available_objects_in_geo_costs
+                streaks_and_objects['available_objects']
             ]
+            assert not sub_geometry_costs.isnull().any().any()
             
             # Hungarian on unassigned stuff
             row_ind, col_ind = scipy.optimize.linear_sum_assignment(
@@ -600,6 +593,7 @@ class Classifier(object):
             ## next frame
             next_frame = choose_next_frame(self.classified_data, 
                 self.current_frame)
+            assert next_frame != self.current_frame
             
             if next_frame is None:
                 # We're done
