@@ -15,7 +15,8 @@ def plot_single_frame(frame_data, ax, vs, frame_number, ds_ratio=2,
     """
     # Get colors
     if colors is None:
-        colors = whiskvid.WHISKER_COLOR_ORDER_W[1:]
+        colors = whiskvid.WHISKER_COLOR_ORDER_W[1:] + [
+            'crimson', 'lime', 'darksalmon']
     
     # Get the frame
     im, stdout, stderr = my.video.get_frame(vs.data.monitor_video.get_path,
@@ -144,20 +145,22 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
         key_frame = key_frames[current_frame_idx]
         axa[1].set_title(key_frame)
 
-        # Get data from this frame
+        # `frame_data` is None iff we just switched frames
+        # In that case we need to load the frame data
         if frame_data is None:
+            # Get data from this frame
             frame_data = my.pick_rows(classified_data, 
                 frame=key_frame).copy()
 
-        # Load results if there are any
-        if key_frame in curated_results_d:
-            frame_data['object'] = curated_results_d[key_frame]['object'].copy()
-            previously_confirmed = True
-        else:
-            previously_confirmed = False
+            # Load confirmed results if there are any
+            if key_frame in curated_results_d:
+                frame_data['object'] = curated_results_d[key_frame]['object'].copy()
+                previously_confirmed = True
+            else:
+                previously_confirmed = False
 
-        # Intify in any case
-        frame_data['object'] = frame_data['object'].astype(np.int).copy()
+            # Intify in any case
+            frame_data['object'] = frame_data['object'].astype(np.int).copy()
 
         # Determine if everything has been confirmed
         all_confirmed = np.all(np.in1d(key_frames, curated_results_d.keys()))
