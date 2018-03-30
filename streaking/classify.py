@@ -5,6 +5,7 @@ import geometry
 import interwhisker
 import itertools
 import animation
+import scipy.optimize
 
 def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
     """Define all possible alignments from objects to streaks
@@ -332,12 +333,17 @@ class Classifier(object):
         if self.verbosity >= 2:
             print "done updating animation"
   
-    def do_assignment(self, best_alignment, best_choice_llik):
-        """Actually assign the best alignment"""
-        # assign
-        if self.verbosity >= 2:
-            print "assigning %r, llik %g" % (best_alignment, best_choice_llik)
+    def do_assignment(self, best_alignment):
+        """Actually assign the best alignment
         
+        best_alignment : seequence of (object, streak) pairs
+        
+        For existing assignments (those already in self.streak2object_ser),
+        this will error-check that they have been done correctly.
+
+        For new assignments (those not in self.streak2object_ser), they
+        will be done to `self.classified_data` and `self.streak2object_ser`.
+        """
         # Actually assign
         for obj, streak in best_alignment:
             # This is a pre-assigned assignment in the alignment
@@ -513,60 +519,37 @@ class Classifier(object):
                 )
             )              
             
+            # Extract out only the available objects and unassigned streaks
+            sub_geometry_costs = geometry_costs.loc[
+                streaks_and_objects['unassigned_streaks'],
+                streaks_and_objects['available_objects'],
+            ]
             
-            ## Combine geometry and alignment metrics
-            # Combine metrics
-            metrics = pandas.DataFrame([
-                constraint_tests['geometry_costs_by_alignment'],
-                ]).T
+            # Hungarian on unassigned stuff
+            row_ind, col_ind = scipy.optimize.linear_sum_assignment(
+                -sub_geometry_costs.values)
             
-            # Account for the differing dynamic ranges of each metric
-            # Simply standardize each to [-1, 0]
-            standardized_metrics = metrics.sub(metrics.min()).divide(
-                metrics.max() - metrics.min())
-            standardized_metrics[standardized_metrics.isnull()] = 1.0
+            # These are the new assignments
+            best_alignment = [(obj, streak) for obj, streak in zip(
+                sub_geometry_costs.columns[col_ind].values, 
+                sub_geometry_costs.index[row_ind].values
+            )]
             
-            # Weighted sum
-            overall_metrics = (
-                .5 * standardized_metrics['geometry']
-            )
+            # A diferent format of best_alignment
+            best_alignment_ser = pandas.Series(*np.transpose(best_alignment),
+                name='object')
+            best_alignment_ser.index.name = 'streak'
             
-            # Choose the best alignment
-            best_choice_idx = np.argmax(overall_metrics)
-            best_alignment = alignments[best_choice_idx]
-            best_choice_llik = overall_metrics[best_choice_idx]
-
 
             ## Actually assign
-            self.do_assignment(best_alignment, best_choice_llik)
+            self.do_assignment(best_alignment)
 
 
             ## Store some metrics
             self.perf_rec_l.append({
                 'frame': self.current_frame, 
-                'cost': best_choice_llik,
-                'n_alignments': len(alignments),
-                'metrics_of_best': metrics.iloc[best_choice_idx],
-                'std_metrics_of_best': standardized_metrics.iloc[
-                    best_choice_idx],
+                'assignments': best_alignment_ser,
             })
-            
-            # The vote of each metric
-            for metric in metrics.columns:
-                best_row = metrics[metric].idxmax()
-                if np.isnan(best_row):
-                    # This happens when all alignments are NaN
-                    # For instance, if there is only one assignment per
-                    # alignment
-                    continue
-                metric_vote = alignments[best_row]
-                metric_vote2 = pandas.Series(*np.transpose(metric_vote), 
-                    name='object').loc[
-                    streaks_and_objects['unassigned_streaks']
-                ]
-                metric_vote2.index.name = 'streak'
-                self.votes_l.append(metric_vote2)
-                self.vote_keys_l.append((self.current_frame, metric))
             
 
             ## Update models
