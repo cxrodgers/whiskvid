@@ -122,35 +122,28 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
     
     # Iterate over frangles
     geometry_costs_l = []
-    geometry_costs_keys_l = []
     for fab, sub_mwe in mwe2.groupby('frangle_bin'):
         # Get corresponding model
         model = fab2model[fab]
         scaler = fab2scaler[fab]
         
-        # Iterate over streaks
-        for streak_to_fit, stf_data_df in sub_mwe.groupby('streak'):
-            # Scale
-            scaled_stf_data = scaler.transform(stf_data_df[
-                geometry_model_columns].values)
-            
-            # Predict the probability of the streak data
-            # This has shape (len(stf_data), len(model.classes_))
-            # The 1e-66 prevents RuntimeWarning
-            stf_log_proba = np.log10(1e-300 + 
-                model.predict_proba(scaled_stf_data))
-            
-            # Store
-            geometry_costs_l.append(pandas.DataFrame(stf_log_proba,
-                index=stf_data_df.index, columns=model.classes_))
-            geometry_costs_keys_l.append((fab, streak_to_fit))
-
-    # Concat
-    geometry_costs_by_frame = pandas.concat(geometry_costs_l,   
-        keys=geometry_costs_keys_l, 
-        names=['fab', 'streak', 'mwe_index'])
-    geometry_costs_by_frame.columns.name = 'object'
+        # Fit
+        scaled_stf_data = scaler.transform(
+            sub_mwe[geometry_model_columns].values)
+        proba = model.predict_proba(scaled_stf_data)
+        
+        # Store
+        geometry_costs_l.append(pandas.DataFrame(proba, 
+            index=sub_mwe.index, columns=model.classes_))
     
+    # Concat
+    geometry_costs_by_frame = pandas.concat(geometry_costs_l, axis=0)
+    geometry_costs_by_frame['streak'] = mwe2.loc[geometry_costs_by_frame.index, 'streak'].values
+    geometry_costs_by_frame = geometry_costs_by_frame.reset_index().set_index(
+        ['streak', 'index'])
+    geometry_costs_by_frame = np.log10(1e-300 + geometry_costs_by_frame)
+    geometry_costs_by_frame.columns.name = 'object'
+
     # Reindex by all classes in case it never came up
     geometry_costs_by_frame = geometry_costs_by_frame.reindex(all_classes, 
         axis=1)
@@ -159,8 +152,8 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
     geometry_costs_by_frame = geometry_costs_by_frame.fillna(-300)
 
     # Mean within streak
-    geometry_costs = geometry_costs_by_frame.mean(level=1)
-    
+    geometry_costs = geometry_costs_by_frame.mean(level=0)
+
     # Floor the cost
     geometry_costs2 = geometry_costs.copy()
     if cost_floor is not None:
