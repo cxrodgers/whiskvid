@@ -7,7 +7,7 @@ import sklearn.model_selection
 
 
 def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
-    calibrate=True):
+    calibrate=True, multi_angle_bins=11):
     """Model the geometry of known objects in mwe
     
     mwe : mwe
@@ -47,9 +47,8 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
     
 
     ## Determine angle bins
-    n_bins = 11
     frame2angle = mwe2.groupby('frame')['frangle'].mean()
-    angle_bins = frame2angle.quantile(np.linspace(0, 1, n_bins)).values
+    angle_bins = frame2angle.quantile(np.linspace(0, 1, multi_angle_bins)).values
     angle_bins[0] = -np.inf
     angle_bins[-1] = np.inf
 

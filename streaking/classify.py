@@ -258,6 +258,7 @@ class Classifier(object):
         # Some other parameters
         self.geometry_model_columns = [
             'tip_x', 'tip_y', 'fol_x', 'fol_y', 'length']
+        self.multi_angle_bins = 11
         
         # Parameterization that is useful for some things
         self.data['center_x'] = self.data[['fol_x', 'tip_x']].mean(1)
@@ -291,6 +292,7 @@ class Classifier(object):
                 self.classified_data,
                 self.geometry_model_columns, 
                 model_typ='nb',
+                multi_angle_bins=self.multi_angle_bins,
             )
         )
 
