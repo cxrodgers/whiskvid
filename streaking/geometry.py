@@ -129,16 +129,10 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
         scaler = fab2scaler[fab]
         
         # Iterate over streaks
-        for streak_to_fit in next_frame_streaks:
-            # Data for this streak
-            stf_data_df = sub_mwe.loc[mwe['streak'] == streak_to_fit, 
-                geometry_model_columns]
-            stf_data = stf_data_df.values
-            if len(stf_data) == 0:
-                continue
-            
+        for streak_to_fit, stf_data_df in sub_mwe.groupby('streak'):
             # Scale
-            scaled_stf_data = scaler.transform(stf_data)
+            scaled_stf_data = scaler.transform(stf_data_df[
+                geometry_model_columns].values)
             
             # Predict the probability of the streak data
             # This has shape (len(stf_data), len(model.classes_))
