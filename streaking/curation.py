@@ -54,7 +54,7 @@ def plot_single_frame(frame_data, ax, vs, frame_number, ds_ratio=2,
             lines_l.append(line)
     
     # Will return index, object, and line of each
-    res = frame_data[['object']].copy()
+    res = frame_data[[key]].copy()
     res.loc[:, 'line'] = lines_l
     
     return ax, res
