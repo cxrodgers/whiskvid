@@ -24,9 +24,9 @@ def hungarian_assign(merged, dist):
     
     # Get the number of index0 and index1 for each frame
     len_index0_by_frame = cost_by_frame.groupby(
-        level=[0, 2]).nunique().groupby(level=0).first()
+        level=[0, 2]).size().groupby(level=0).first()
     len_index1_by_frame = cost_by_frame.groupby(
-        level=[0, 1]).nunique().groupby(level=0).first()
+        level=[0, 1]).size().groupby(level=0).first()
     assert (len_index0_by_frame.index.values == 
         len_index1_by_frame.index.values).all()
     
