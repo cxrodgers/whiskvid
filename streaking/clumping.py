@@ -3,7 +3,7 @@ import numpy as np
 from base import calculate_center2center_distance_on_merged
 import scipy.optimize
 
-def clump_segments_into_streaks(mwe):
+def clump_segments_into_streaks(mwe, threshold=32.0):
     ## Clump segments into streaks
     mwe = mwe.copy()
     
@@ -89,7 +89,7 @@ def clump_segments_into_streaks(mwe):
             axis=1)
 
     # Nullify assignments above criterion
-    assignments = assignments.loc[assignments['cost'] < 45]
+    assignments = assignments.loc[assignments['cost'] < threshold]
 
     
     ## Propagate assignments
