@@ -3,7 +3,99 @@ import numpy as np
 from base import calculate_center2center_distance_on_merged
 import scipy.optimize
 
+def hungarian_assign(merged, dist):
+    """Hungarian assignment for clumping
+    
+    This is called by clump_segments_into_streaks and implements
+    the Hungarian algorithm for clumping.
+    
+    Returns: assignments
+        Indexed by frame0 and index0, columns are index1 and cost
+    """
+    # Get cost by frame
+    cost_by_frame = pandas.concat([merged, dist], axis=1).set_index(
+        ['frame0', 'index0', 'index1'])['cost'].sort_index()    
+    
+    # Extract as arrays
+    frame0_array = cost_by_frame.index.get_level_values('frame0').values
+    index0_array = cost_by_frame.index.get_level_values('index0').values
+    index1_array = cost_by_frame.index.get_level_values('index1').values
+    cost_array = cost_by_frame.values
+    
+    # Get the number of index0 and index1 for each frame
+    len_index0_by_frame = cost_by_frame.groupby(
+        level=[0, 2]).nunique().groupby(level=0).first()
+    len_index1_by_frame = cost_by_frame.groupby(
+        level=[0, 1]).nunique().groupby(level=0).first()
+    assert (len_index0_by_frame.index.values == 
+        len_index1_by_frame.index.values).all()
+    
+    # Group by frame and extract the indexes into cost_array for each frame
+    gobj = cost_by_frame.reset_index().groupby('frame0')
+    frame_idxs_l = gobj.groups.values()
+    
+    # Check that the frames are sorted the same for each array
+    unique_frames = np.sort(np.unique(frame0_array))
+    assert (unique_frames == gobj.groups.keys()).all()
+    assert (unique_frames == len_index0_by_frame.index.values).all()
+    
+    
+    # Iterate over frames and store raveled indexes of choices
+    raveled_idxs_l = []
+    for n_frame, frame_idxs in enumerate(frame_idxs_l):
+        # Reshape
+        cost_matrix_this_frame = cost_array[frame_idxs.values].reshape((
+            len_index0_by_frame.values[n_frame],
+            len_index1_by_frame.values[n_frame],
+        ))
+
+        # Optimize
+        # This step takes about 50% of the total time in this function
+        row_ind, col_ind = scipy.optimize.linear_sum_assignment(
+            cost_matrix_this_frame)        
+        
+        # Ravel to match the flat arrays
+        raveled_idxs = np.ravel_multi_index((row_ind, col_ind), 
+            cost_matrix_this_frame.shape)
+
+        # Offset by the first index of this frame and store
+        offset = frame_idxs.values[0]
+        raveled_idxs_l.append(offset + raveled_idxs)
+    
+    # Concatenate raveled indexes and slice accordingly
+    all_raveled = np.concatenate(raveled_idxs_l)
+    choices_frames = frame0_array[all_raveled]
+    choices_index0 = index0_array[all_raveled]
+    choices_index1 = index1_array[all_raveled]
+    choices_costs = cost_array[all_raveled]
+
+    # DataFrame
+    assignments = pandas.DataFrame.from_items([
+        ('index0', choices_index0), ('index1', choices_index1),
+        ('frame0', choices_frames), ('cost', choices_costs),]
+        ).set_index(['frame0', 'index0']).sort_index()
+    
+    return assignments
+
 def clump_segments_into_streaks(mwe, threshold=32.0, method='greedy'):
+    """Clump segments into streaks
+    
+    Each segment will be evaluated versus every segment in the following
+    frame. The pairwise distance is currently the Cartesian distance
+    between the center of each segment. Segments are matched to segments
+    in the following frame if the distance is less than `threshold`, using
+    either a greedy or Hungarian algoirthm. These assignments are propagated
+    throughout and the result is a series of "streaks".
+    
+    mwe : data
+    threshold : threshold for clumping
+    method : 'greedy' or 'hungarian'
+        'greedy' is much faster
+        'hungarian' is optimal
+    
+    Returns : clumped_data
+        This is `mwe` with a 'streak' column inserted
+    """
     ## Clump segments into streaks
     mwe = mwe.copy()
     
@@ -45,54 +137,15 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='greedy'):
         assert not assignments.index.duplicated().any()
 
     elif method == 'hungarian':
-        # Index by frame and each possible segment, take 'cost'
-        cost_by_frame = pandas.concat([merged, dist], axis=1).set_index(
-            ['frame0', 'index0', 'index1'])['cost']
-        
-        # For each frame, use hungarian to assign index0 to index1
-        frame_res_l = []
-        choices_l = []
-        
-        # This loop is intensive, not even the hungarian that is the hard part,
-        # just the grouping and unstacking
-        for frame, cost_matrix_this_frame in cost_by_frame.groupby(level=0):
-            # Cost matrix for this frame, with columns corresponding to segments
-            # in the next frame
-            cost_matrix_this_frame = cost_matrix_this_frame.unstack()
-            
-            # Optimize
-            row_ind, col_ind = scipy.optimize.linear_sum_assignment(
-                cost_matrix_this_frame)
-            
-            # The optimized selections as a series
-            choices = pandas.Series(cost_matrix_this_frame.columns[col_ind], 
-                index=cost_matrix_this_frame.index[row_ind])
-
-            # Store choices
-            choices_l.append(choices)
-        
-        # Concat choices
-        all_choices = pandas.concat(choices_l)
-        
-        # Extract costs
-        all_choice_costs = pandas.concat([merged, dist], axis=1)[
-            ['frame0', 'index0', 'index1', 'cost']].set_index(
-            ['index0', 'index1'])['cost'].loc[
-            pandas.MultiIndex.from_arrays([
-            all_choices.index.get_level_values(1), all_choices.values])].values
-
-        # Store both in assignments
-        assignments = pandas.concat([
-            all_choices, pandas.Series(
-            all_choice_costs, index=all_choices.index, name='cost')],
-            axis=1)
+        assignments = hungarian_assign(merged, dist)
 
     # Nullify assignments above criterion
     assignments = assignments.loc[assignments['cost'] < threshold]
 
     
     ## Propagate assignments
-    # This is now the heaviest part of the algorithm
+    # This step takes longer than 'greedy' but is trivial compared to
+    # 'hungarian'.
     # Get streaks, frames, and indexes as arrays
     streakass = np.arange(len(mwe)).astype(np.int)
     frameidx = assignments.index.get_level_values(level='frame0').values
