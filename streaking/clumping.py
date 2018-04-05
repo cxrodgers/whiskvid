@@ -77,7 +77,7 @@ def hungarian_assign(merged, dist):
     
     return assignments
 
-def clump_segments_into_streaks(mwe, threshold=32.0, method='greedy'):
+def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian'):
     """Clump segments into streaks
     
     Each segment will be evaluated versus every segment in the following
