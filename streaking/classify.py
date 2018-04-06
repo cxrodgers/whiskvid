@@ -266,8 +266,8 @@ class Classifier(object):
         self.data['center_y'] = self.data[['fol_y', 'tip_y']].mean(1)        
         
         # announcements
-        self.frame_announce = 0
-        self.frame_announce_interval = 5000
+        self.frac_complete_announce = 0
+        self.frac_complete_announce_interval = 5
     
     def clump(self):
         """Clump rows into streaks"""
@@ -285,6 +285,13 @@ class Classifier(object):
         """
         if self.verbosity >= 2:
             print "updating geometry"
+        
+        # Add an angle column
+        if 'frangle' not in self.classified_data.columns:
+            frame2angle = self.classified_data.groupby('frame')[
+                'angle'].mean()
+            self.classified_data['frangle'] = self.classified_data[
+                'frame'].map(frame2angle)
         
         # Update
         (self.geometry_angle_bins, self.geometry_fab2model, 
@@ -463,8 +470,6 @@ class Classifier(object):
         ## Iterate through frames
         # Which frame we're on
         self.current_frame = self.frame_start
-        self.frame_announce = self.frame_announce_interval * (
-            self.current_frame // self.frame_announce_interval)
         
         # Various stuff to keep track of
         self.perf_rec_l = []
@@ -477,23 +482,19 @@ class Classifier(object):
             if self.verbosity >= 2:
                 print ("%07d info: starting frame" % self.current_frame)
             elif self.verbosity >= 1:
-                if self.current_frame >= self.frame_announce:
-                    # Fraction complete
-                    frac_complete = (np.sum(
-                        ~self.classified_data['object'].isnull()) / float(
-                        len(self.classified_data)))
-                        
+                # Fraction complete
+                frac_complete = (np.sum(
+                    ~self.classified_data['object'].isnull()) / float(
+                    len(self.classified_data)))
+                
+                if frac_complete > self.frac_complete_announce:
                     print ("%07d info: %0.1f%% complete" % (
                         self.current_frame, 100 * frac_complete))
 
-                    # Update frame announce
-                    self.frame_announce = self.frame_announce_interval * (1 + 
-                        self.current_frame // self.frame_announce_interval)                    
-                    
-                    # Wraparound issues
-                    if (self.frame_announce > 
-                        self.classified_data['frame'].max()):
-                        self.frame_announce = 0
+                    # Update frac_complete_announce
+                    self.frac_complete_announce += (
+                        self.frac_complete_announce_interval)
+
             
             ## Animate
             if self.animate:
@@ -585,6 +586,10 @@ class Classifier(object):
                 # Update the model
                 self.update_geometry_model()
                 n_geo_rows_last_update = n_geo_rows
+
+                if self.verbosity >= 1:
+                    print ("%07d info: done updating geometry model" % 
+                        self.current_frame)
             
 
             ## Animate the decision
