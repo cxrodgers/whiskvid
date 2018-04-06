@@ -79,21 +79,49 @@ def clear_axis(ax):
         txt.remove()    
 
 def parse_input(choice):
+    """Parse text input into decision
+    
+    choice : text input
+    
+    If choice is 'f':
+        go forward
+    If choice is 'b':
+        go back
+    If choice is 'q':
+        quit
+    If choice is 'c':
+        mark as confirmed and go forward
+    If choices is 'm':
+        mark as munged and go forward
+    If choices is 'M':
+        mark as unmunged and go forward
+    If choice is 'sMN':
+        switch M and N
+    If choice is 'u':
+        go to next unconfirmed
+    
+    Otherwise, the result is 'stay', switchdict is {}, confirm is False,
+    munged is False
+    
+    Returns: result, confirm, munged, switchdict
+        result: 'next', 'back', 'quit', 'stay', 'next unconfirmed'
+        confirm: True or False
+        munged: True or False
+        unmunged: True or False
+        switchdict: dict from M to N and N to M
+    """
     # Parse answer into switchdict
     result = 'stay'
     confirm = False
+    munged = False
+    unmunged = False
     switchdict = {}
 
     # Strip
     schoice = choice.strip()
     
     # Switch on length of input
-    if schoice == '':
-        # Take this as confirmation
-        result = 'next'
-        confirm = True
-    
-    elif len(schoice) == 1:
+    if len(schoice) == 1:
         # One character input
         cmd = schoice[0]
         if schoice == 'f':
@@ -102,6 +130,18 @@ def parse_input(choice):
             result = 'back'
         elif cmd == 'q':
             result = 'quit'
+        elif cmd == 'm':
+            result = 'next'
+            munged = True
+        elif cmd == 'M':
+            result = 'next'
+            unmunged = True
+        elif cmd == 'c':
+            result = 'next'
+            confirm = True
+        elif cmd == 'u':
+            result = 'next unconfirmed'
+            confirm = True
     
     elif len(schoice) == 3:
         # Three character input: command, whisker0, whisker1
@@ -116,14 +156,24 @@ def parse_input(choice):
                 # Switch whiskers 0 and 1
                 switchdict[w0] = w1
                 switchdict[w1] = w0
-            elif cmd == 'd':
-                # Relabel whisker 0 as whisker 1
-                switchdict[w0] = w1    
     
-    return result, confirm, switchdict
+    return result, confirm, munged, unmunged, switchdict
 
-def interactive_curation(keystone_frame, key_frames, classified_data, vs):
-    """Interactively collect curation"""
+def interactive_curation(keystone_frame, key_frames, classified_data, vs,
+    existing_curation_data=None):
+    """Interactively collect curation
+    
+    keystone_frame : frame that defines the object mapping
+        It will be displayed on the left
+    key_frames : frames to curate
+    classified_data : result of a classifier run
+    vs : VideoSession for plotting whiskers
+    existing_curation_data : previously curated results (DataFrame)
+    
+    Returns: curation_data, munged_frames
+        curation_data : An updated version of existing_curation_data
+        munged_frames : list of munged frames
+    """
     # Interactive mode
     plt.ion()
     
@@ -135,8 +185,16 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
     plot_single_frame(frame_data, axa[0], vs, keystone_frame, ds_ratio=2, 
         key='object')
 
-    # Plot each key in turn on right
+    # Convert curation results to dict for backwards compatibility
     curated_results_d = {}
+    if existing_curation_data is not None:
+        for frame in existing_curation_data.index.levels[0]:
+            curated_results_d[frame] = existing_curation_data.loc[frame]
+
+    # Store list of munged frames
+    munged_frames = []
+
+    # Plot each key in turn on right
     quit_running = False
     current_frame_idx = 0
     frame_data = None
@@ -154,7 +212,8 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
 
             # Load confirmed results if there are any
             if key_frame in curated_results_d:
-                frame_data['object'] = curated_results_d[key_frame]['object'].copy()
+                frame_data['object'] = curated_results_d[key_frame][
+                    'object'].copy()
                 previously_confirmed = True
             else:
                 previously_confirmed = False
@@ -163,13 +222,23 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
             frame_data['object'] = frame_data['object'].astype(np.int).copy()
 
         # Determine if everything has been confirmed
-        all_confirmed = np.all(np.in1d(key_frames, curated_results_d.keys()))
+        all_confirmed = np.all(np.in1d(key_frames, 
+            munged_frames + curated_results_d.keys()
+        ))
+
+        # Determine if this frame is munged
+        if key_frame in munged_frames:
+            frame_is_munged = True
+        else:
+            frame_is_munged = False
         
         # Title accordingly
         if all_confirmed:
             axa[1].set_title('all done %d' % key_frame)
         elif previously_confirmed:
             axa[1].set_title('confirmed %d' % key_frame)
+        elif frame_is_munged:
+            axa[1].set_title('munged %d' % key_frame)
         else:
             axa[1].set_title('%d' % key_frame)
         
@@ -180,10 +249,11 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
         plt.draw()
 
         # Get answer
-        choice = raw_input("Confirm [y/n/q]: ")
+        choice = raw_input("[c]onfirm / [f]orward / [b]ack / "
+            "[m]ung / un[M]ung / [q]uit / next [u]nconfirmed / [sXY]switch: ")
         
         # Parse
-        result, confirm, switchdict = parse_input(choice)
+        result, confirm, munged, unmunged, switchdict = parse_input(choice)
 
         # Apply switchdict to frame_data['object'] using a temporary column
         frame_data['object2'] = frame_data['object'].copy()
@@ -193,14 +263,37 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
         frame_data['object'] = frame_data['object2'].copy()
         frame_data = frame_data.drop('object2', axis=1)
         
+        # Append to munged_frames if munged
+        if munged and key_frame not in munged_frames:
+            munged_frames.append(key_frame)
+        
+        # Drop from results if munged
+        if munged and key_frame in curated_results_d:
+            curated_results_d.pop(key_frame)
+        
+        # Remove from munged_frames if unmunged
+        if unmunged:
+            if key_frame in munged_frames:
+                munged_frames.remove(key_frame)
+        
         # Store in dict if confirmed
         if confirm:
             print "storing confirmed result"
-            curated_results_d[key_frame] = frame_data[['streak', 'object']].copy()
+            curated_results_d[key_frame] = frame_data[[
+                'streak', 'object']].copy()
         
         # Go to next or previous frame, or quit
-        if result in ['next', 'back']:
+        if result in ['next', 'back', 'next unconfirmed']:
             frame_data = None
+        
+            if result == 'next unconfirmed':
+                unconfirmed_frames = key_frames[~np.in1d(key_frames, 
+                    munged_frames + curated_results_d.keys())]
+
+                if len(unconfirmed_frames) > 0:
+                    current_frame_idx = unconfirmed_frames[0]
+                else:
+                    print "no more unconfirmed"
         
             if result == 'next':
                 current_frame_idx = np.mod(current_frame_idx + 1, 
@@ -221,5 +314,6 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs):
         cres = None
     else:
         cres = pandas.concat(curated_results_d, names=['frame'])
-        
-    return cres
+        cres.index.names = ['frame', 'mwe_index']
+    
+    return cres, munged_frames
