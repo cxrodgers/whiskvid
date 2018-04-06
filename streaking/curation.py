@@ -141,7 +141,6 @@ def parse_input(choice):
             confirm = True
         elif cmd == 'u':
             result = 'next unconfirmed'
-            confirm = True
     
     elif len(schoice) == 3:
         # Three character input: command, whisker0, whisker1
@@ -174,6 +173,12 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs,
         curation_data : An updated version of existing_curation_data
         munged_frames : list of munged frames
     """
+    # Error checking
+    if len(key_frames) != len(np.unique(key_frames)):
+        raise ValueError("non unique key frames provided")
+    if keystone_frame in key_frames:
+        raise ValueError("keystone frame in key frames")
+
     # Interactive mode
     plt.ion()
     
@@ -287,11 +292,11 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs,
             frame_data = None
         
             if result == 'next unconfirmed':
-                unconfirmed_frames = key_frames[~np.in1d(key_frames, 
-                    munged_frames + curated_results_d.keys())]
+                unconfirmed_frames_mask = ~np.in1d(key_frames, 
+                    munged_frames + curated_results_d.keys())
 
-                if len(unconfirmed_frames) > 0:
-                    current_frame_idx = unconfirmed_frames[0]
+                if np.any(unconfirmed_frames_mask):
+                    current_frame_idx = np.where(unconfirmed_frames_mask)[0][0]
                 else:
                     print "no more unconfirmed"
         
