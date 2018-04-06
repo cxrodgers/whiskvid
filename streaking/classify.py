@@ -267,7 +267,7 @@ class Classifier(object):
         
         # announcements
         self.frac_complete_announce = 0
-        self.frac_complete_announce_interval = 5
+        self.frac_complete_announce_interval = .05
     
     def clump(self):
         """Clump rows into streaks"""
