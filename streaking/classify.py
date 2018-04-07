@@ -465,9 +465,6 @@ class Classifier(object):
         all_known_objects = np.sort(np.unique(
             self.classified_data['object'].dropna().astype(np.int).values))
         
-        # Cache this for measure_geometry_costs
-        self._streak_grouped_data = self.classified_data.groupby('streak')
-        
 
         ## init animation
         if self.animate:
@@ -535,16 +532,13 @@ class Classifier(object):
             
             ## Test all constraints
             # Test geometry costs
-            mwe_of_streaks_to_assign = pandas.concat([
-                self._streak_grouped_data.get_group(streak)
-                for streak in streaks_and_objects['streaks_in_frame']
-            ])
             geometry_costs = (
                 geometry.measure_geometry_costs(
-                    mwe_of_streaks_to_assign,
+                    self.classified_data, 
                     self.geometry_angle_bins,
                     self.geometry_fab2model,
                     self.geometry_fab2scaler,
+                    streaks_and_objects['streaks_in_frame'],
                     self.geometry_model_columns, 
                     all_known_objects,
                 )
