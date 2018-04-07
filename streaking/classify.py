@@ -461,6 +461,10 @@ class Classifier(object):
         self.update_geometry_model()
         n_geo_rows_last_update = np.sum(~self.classified_data['object'].isnull())
 
+        # Needed by measure_geometry_costs
+        all_known_objects = np.sort(np.unique(
+            self.classified_data['object'].dropna().astype(np.int).values))
+        
 
         ## init animation
         if self.animate:
@@ -536,6 +540,7 @@ class Classifier(object):
                     self.geometry_fab2scaler,
                     streaks_and_objects['streaks_in_frame'],
                     self.geometry_model_columns, 
+                    all_known_objects,
                 )
             )              
             
