@@ -113,6 +113,7 @@ def measure_geometry_costs(mwe, angle_bins, fab2model, fab2scaler,
     """
     # Process data of corresponding streaks
     # This line ends up taking half of the total running time of this function
+    # Not sure if it is the 'isin' or the copy
     mwe2 = mwe.loc[mwe['streak'].isin(next_frame_streaks)].copy()
 
     # Insert frangle column
