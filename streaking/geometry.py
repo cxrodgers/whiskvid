@@ -89,14 +89,13 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
     
     return angle_bins, fab2model, fab2scaler
 
-def measure_geometry_costs(streak_grouped_data, streaks_in_frame,
+def measure_geometry_costs(mwe_of_streaks_to_assign, 
     angle_bins, fab2model, fab2scaler, 
     geometry_model_columns, all_known_objects,
     cost_floor=-6):
     """Measure geometry costs
     
-    streak_grouped_data : classified data grouped by streak
-    streaks_in_frame : streaks to consider
+    mwe_of_streaks_to_assign : subset of the data with the streaks to consider
     angle_bins, fab2model, fab2scaler : from update_geometry_model
     geometry_model_columns : columns from mwe to feed to model
     all_known_objects : array of all known object labels
@@ -107,16 +106,10 @@ def measure_geometry_costs(streak_grouped_data, streaks_in_frame,
     flooring the cost of every alignment at `cost_floor`.
     
     Returns: geometry_costs (DataFrame)
-        The index is every streak in `streaks_in_frame`, and 
+        The index is every streak in `mwe_of_streaks_to_assign`, and 
         the columns are `all_known_objects`. The values are the costs 
         of making that assignment.
     """
-    # Get slice of data
-    mwe_of_streaks_to_assign = pandas.concat([
-        streak_grouped_data.get_group(streak)
-        for streak in streaks_in_frame
-    ])    
-    
     # Insert frangle column
     mwe_of_streaks_to_assign['frangle_bin'] = pandas.cut(
         mwe_of_streaks_to_assign['frangle'], angle_bins, 

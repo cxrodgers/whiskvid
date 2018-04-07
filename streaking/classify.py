@@ -535,10 +535,13 @@ class Classifier(object):
             
             ## Test all constraints
             # Test geometry costs
+            mwe_of_streaks_to_assign = pandas.concat([
+                self._streak_grouped_data.get_group(streak)
+                for streak in streaks_and_objects['streaks_in_frame']
+            ])
             geometry_costs = (
                 geometry.measure_geometry_costs(
-                    self._streak_grouped_data, 
-                    streaks_and_objects['streaks_in_frame'],
+                    mwe_of_streaks_to_assign,
                     self.geometry_angle_bins,
                     self.geometry_fab2model,
                     self.geometry_fab2scaler,
