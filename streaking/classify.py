@@ -563,6 +563,8 @@ class Classifier(object):
             
 
             ## Actually assign
+            # This line takes about 12% of the total running time and
+            # should be optimized
             self.do_assignment(best_alignment)
 
 
@@ -598,6 +600,8 @@ class Classifier(object):
 
             
             ## next frame
+            # This line takes about 10% of the total running time and
+            # should be optimized
             next_frame = choose_next_frame(self.classified_data, 
                 self.current_frame)
             assert next_frame != self.current_frame
