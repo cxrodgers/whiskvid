@@ -77,7 +77,8 @@ def hungarian_assign(merged, dist):
     
     return assignments
 
-def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian'):
+def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian',
+    maximum_streak_length=200):
     """Clump segments into streaks
     
     Each segment will be evaluated versus every segment in the following
@@ -92,6 +93,9 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian'):
     method : 'greedy' or 'hungarian'
         'greedy' is much faster
         'hungarian' is optimal
+    maximum_streak_length : maximum length of a streak
+        If it is longer than this, a new one will be started at this interval
+        If None, then they can be any length
     
     Returns : clumped_data
         This is `mwe` with a 'streak' column inserted
@@ -186,7 +190,42 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian'):
     chains = pandas.concat(rec_l, axis=0, keys=range(len(rec_l)), 
         verify_integrity=True).swaplevel().sort_index()
     chains.index.names = ['start', 'link']
+    chains.name = 'mwe_index'
+    
+    
+    ## Break chains
+    if maximum_streak_length is not None:
+        # Identify chains that are too long
+        start2size = chains.groupby(level=0).size()
+        too_long_chains = start2size[start2size > maximum_streak_length].index
 
+        # Iterate over too long chains and break them
+        chains_ri = chains.reset_index()
+        for start in too_long_chains:
+            mask = chains_ri['start'] == start
+            sub_chains_ri = chains_ri[mask]
+            
+            # The new link number will be mod `maximum_streak_length` of 
+            # the old link number
+            new_link = np.mod(sub_chains_ri['link'], maximum_streak_length)
+            
+            # The new start is every maximum_streak_length-th link in 
+            # the old chain
+            new_start = np.concatenate([[this_start] * maximum_streak_length
+                for this_start in sub_chains_ri['mwe_index'].values[
+                ::maximum_streak_length]]
+                )[:len(sub_chains_ri)]
+            
+            # Store
+            chains_ri.loc[mask, 'link'] = new_link
+            chains_ri.loc[mask, 'start'] = new_start
+        
+        # Set index again
+        broken_chains = chains_ri.set_index(['start', 'link'])['mwe_index']
+        chains = broken_chains
+    
+    
+    ## Error checks
     # Error check no duplicates
     assert not chains.duplicated().any()
 
@@ -195,13 +234,13 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian'):
     n_singletons = (~np.in1d(streakass, chains.values)).sum()
     assert n_singletons + len(chains) == len(streakass)
 
-    # Assign
+    
+    ## Assign
     for start, this_chain in chains.groupby(level=0):
         streakass[this_chain.values] = start
 
     # densify streakass
     mwe['streak'] = streakass
     mwe['streak'] = mwe['streak'].rank(method='dense').astype(np.int)
-
 
     return mwe
