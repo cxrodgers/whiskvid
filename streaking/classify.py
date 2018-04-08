@@ -75,10 +75,18 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
     return alignments
 
 def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
-    streak2object_ser, key='object'):
+    streak2object_ser, all_known_objects=None, key='object'):
     """Pick out streaks to assign and available objects
     
     Slices `mwe` at frame `next_frame`.
+    
+    mwe : data
+    next_frame : frame to process
+    streak2object_ser : known mapping between streaks and objects
+    all_known_objects : list of all possible object labels
+        if None, then we take streak2object_ser.unique(), but this requires
+        that each available object has already occurred at least once
+    key : used to find objects in previous frame
     
     Returns: dict
         'streaks_in_frame' : all streaks in frame `next_frame`
@@ -89,6 +97,9 @@ def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
         'available_objects' : objects that are not yet assigned in `next_frame`
         'objects_in_previous_frame' : objects in previous frame
     """
+    if all_known_objects is None:
+        all_known_objects = streak2object_ser.unique()
+    
     # Find streaks from next_frame
     next_frame_streaks = mwe.loc[mwe.frame == next_frame, 'streak'].values
 
@@ -101,7 +112,7 @@ def pick_streaks_and_objects_for_current_frame(mwe, next_frame,
         if streak not in streak2object_ser.index]
     
     # Identify which objects are available
-    available_objects = [obj for obj in streak2object_ser.unique()
+    available_objects = [obj for obj in all_known_objects
         if obj not in pre_assigned_streaks.values]
 
     # Identify objects in previous frame (for smoothness)
@@ -692,7 +703,7 @@ class Assigner(object):
     def do_assignment(self, best_alignment):
         """Actually assign the best alignment
         
-        best_alignment : seequence of (object, streak) pairs
+        best_alignment : sequence of (object, streak) pairs
         
         For existing assignments (those already in self.streak2object_ser),
         this will error-check that they have been done correctly.
@@ -700,21 +711,29 @@ class Assigner(object):
         For new assignments (those not in self.streak2object_ser), they
         will be done to `self.classified_data` and `self.streak2object_ser`.
         """
-        # Actually assign
+        # Error check
+        streaks_to_assign, objects_to_assign = [], []
         for obj, streak in best_alignment:
-            # This is a pre-assigned assignment in the alignment
             if streak in self.streak2object_ser.index:
+                # This streak has already been assigned
+                # Error check for consistency
                 assert np.all(self.classified_data.loc[
                     self.classified_data['streak'] == streak, 
                     'object'] == obj
                 )
             else:
-                # Actually assign
-                self.classified_data.loc[
-                    self.classified_data['streak'] == streak, 'object'] = obj
-                
-                # Add to db
-                self.streak2object_ser.loc[streak] = obj        
+                # Not yet assigned
+                streaks_to_assign.append(streak)
+                objects_to_assign.append(obj)
+        
+        # Add to db
+        self.streak2object_ser = self.streak2object_ser.append(
+            pandas.Series(objects_to_assign, index=streaks_to_assign),
+            verify_integrity=True)
+        
+        # Apply to data
+        self.classified_data['object'] = self.classified_data['streak'].map(
+            self.streak2object_ser)
 
     def run_on_frame(self, frame):
         """Measure costs and do assignment for individual frame
@@ -732,7 +751,7 @@ class Assigner(object):
         ## Get data
         streaks_and_objects = pick_streaks_and_objects_for_current_frame(
             self.classified_data, self.current_frame,
-            self.streak2object_ser,
+            self.streak2object_ser, self.all_known_objects,
         )
         
         # Skip if no work
@@ -774,7 +793,7 @@ class Assigner(object):
             sub_geometry_costs.columns[col_ind].values, 
             sub_geometry_costs.index[row_ind].values
         )]
-        
+
 
         ## Actually assign
         # This line takes about 12% of the total running time and
