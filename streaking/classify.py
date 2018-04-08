@@ -620,3 +620,212 @@ class Classifier(object):
         self.date_time_stop = datetime.datetime.now()
         
         return self.classified_data
+
+
+class Assigner(object):
+    """Assigns objects but doesn't update its own model"""
+    def __init__(self, classified_data, geometry_fab2model=None,
+        geometry_angle_bins=None, geometry_fab2scaler=None,
+        geometry_model_columns=None, verbosity=1, 
+        frac_complete_announce_interval=.05,
+        streak2object_ser=None, all_known_objects=None):
+        """Initialize a new Assigner
+        
+        classified_data : data to use. Will be copied.
+            Should already have 'streak' and 'object' columns
+        
+        geometry_fab2model, geometry_angle_bins, geometry_fab2scaler,
+        geometry_model_columns : the model to use
+        streak2object_ser : used to pick out streaks and objects so
+            it should be up to date
+        all_known_objects : used in measure geometry costs
+        """
+        # Take init kwargs
+        self.classified_data = classified_data.copy()
+        self.verbosity = verbosity
+        
+        # Store the model if provided
+        self.geometry_model_columns = geometry_model_columns
+        self.geometry_angle_bins = geometry_angle_bins
+        self.geometry_fab2scaler = geometry_fab2scaler
+        self.geometry_fab2model = geometry_fab2model
+        
+        # Known objects
+        self.streak2object_ser = streak2object_ser
+        self.all_known_objects = all_known_objects
+        
+        # announcements
+        self.frac_complete_announce = 0
+        self.frac_complete_announce_interval = frac_complete_announce_interval
+    
+    def announce_frame(self):
+        """Announce frame and update announcement interval"""
+        if self.verbosity >= 2:
+            print ("%07d info: starting frame" % self.current_frame)
+        
+        elif self.verbosity >= 1:
+            # Fraction complete
+            frac_complete = (np.sum(
+                ~self.classified_data['object'].isnull()) / float(
+                len(self.classified_data)))
+            
+            # Announce and update interval
+            if frac_complete > self.frac_complete_announce:
+                print ("%07d info: %0.1f%% complete" % (
+                    self.current_frame, 100 * frac_complete))
+
+                # Update frac_complete_announce
+                self.frac_complete_announce += (
+                    self.frac_complete_announce_interval)        
+    
+    def announce_frame_status(self, streaks_and_objects):
+        # Print status
+        if self.verbosity >= 2:
+            print "goal: assign streaks %r to objects %r" % (
+                streaks_and_objects['unassigned_streaks'],
+                streaks_and_objects['available_objects'],
+            )
+            print "info: streaks %r already assigned" % (
+                list(streaks_and_objects['assigned_streaks'].values),
+            )
+
+    def do_assignment(self, best_alignment):
+        """Actually assign the best alignment
+        
+        best_alignment : seequence of (object, streak) pairs
+        
+        For existing assignments (those already in self.streak2object_ser),
+        this will error-check that they have been done correctly.
+
+        For new assignments (those not in self.streak2object_ser), they
+        will be done to `self.classified_data` and `self.streak2object_ser`.
+        """
+        # Actually assign
+        for obj, streak in best_alignment:
+            # This is a pre-assigned assignment in the alignment
+            if streak in self.streak2object_ser.index:
+                assert np.all(self.classified_data.loc[
+                    self.classified_data['streak'] == streak, 
+                    'object'] == obj
+                )
+            else:
+                # Actually assign
+                self.classified_data.loc[
+                    self.classified_data['streak'] == streak, 'object'] = obj
+                
+                # Add to db
+                self.streak2object_ser.loc[streak] = obj        
+
+    def run_on_frame(self, frame):
+        """Measure costs and do assignment for individual frame
+        
+        The availables treaks and objects are identified for this frame.
+        The geometry costs are measured. The Hungarian algorithm is used
+        to choose an assignment. The assignment is made using 
+        `self.do_assignment`.
+        """
+        ## Announce frame
+        self.current_frame = frame
+        self.announce_frame()
+
+
+        ## Get data
+        streaks_and_objects = pick_streaks_and_objects_for_current_frame(
+            self.classified_data, self.current_frame,
+            self.streak2object_ser,
+        )
+        
+        # Skip if no work
+        if len(streaks_and_objects['unassigned_streaks']) == 0:
+            if self.verbosity >= 2:
+                print "skipping frame,", self.current_frame
+            return
+        
+        # announce status
+        self.announce_frame_status(streaks_and_objects)
+        
+        
+        ## Test geometry costs
+        geometry_costs = (
+            geometry.measure_geometry_costs(
+                self.classified_data, 
+                self.geometry_angle_bins,
+                self.geometry_fab2model,
+                self.geometry_fab2scaler,
+                streaks_and_objects['streaks_in_frame'],
+                self.geometry_model_columns, 
+                self.all_known_objects,
+            )
+        )              
+        
+        # Extract out only the available objects and unassigned streaks
+        sub_geometry_costs = geometry_costs.loc[
+            streaks_and_objects['unassigned_streaks'],
+            streaks_and_objects['available_objects']
+        ]
+        assert not sub_geometry_costs.isnull().any().any()
+        
+        # Hungarian on unassigned stuff
+        row_ind, col_ind = scipy.optimize.linear_sum_assignment(
+            -sub_geometry_costs.values)
+        
+        # These are the new assignments
+        best_alignment = [(obj, streak) for obj, streak in zip(
+            sub_geometry_costs.columns[col_ind].values, 
+            sub_geometry_costs.index[row_ind].values
+        )]
+        
+
+        ## Actually assign
+        # This line takes about 12% of the total running time and
+        # should be optimized
+        self.do_assignment(best_alignment)        
+
+    def run(self, frame_start=None):
+        """Run starting from `frame_start` and continuing until done.
+        
+        Each individual frame, beginning with `frame_start`, is processed
+        with `self.run_on_frame`. The next frame is chosen using
+        `choose_next_frame`.
+        
+        The attributes `date_time_start`, `date_time_stop`, and
+        `current_frame` are used for debugging information.
+        
+        frame_start : frame to start on
+        
+        Returns: self.classified_data
+        """
+        # Store start time
+        self.date_time_start = datetime.datetime.now()
+
+        # Which frame we're on
+        self.current_frame = frame_start
+
+        # Loop till break
+        while True:
+            # Run on frame
+            # Will return immediately if no work to do on this frame
+            self.run_on_frame(self.current_frame)
+
+            # Choose next frame
+            # This line takes about 10% of the total running time and
+            # should be optimized
+            next_frame = choose_next_frame(self.classified_data, 
+                self.current_frame)
+            
+            # Error check
+            # This can happen if assignments aren't being made properly
+            # resulting in infinite loop
+            assert next_frame != self.current_frame
+            
+            # Update current frame
+            if next_frame is None:
+                # We're done
+                break
+            else:
+                self.current_frame = next_frame
+        
+        # Store stop time
+        self.date_time_stop = datetime.datetime.now()
+        
+        return self.classified_data
