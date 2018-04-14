@@ -142,6 +142,20 @@ def parse_input(choice):
         elif cmd == 'u':
             result = 'next unconfirmed'
     
+    elif ' ' in schoice:
+        # Interpret this as two numbers to be switched
+        # Hack for two-digit entries
+        spl_schoice = schoice.split()
+        if len(spl_schoice) == 2:
+            w0s, w1s = spl_schoice
+            if str.isdigit(w0s) and str.isdigit(w1s):
+                # Intify whisker
+                w0 = int(w0s)
+                w1 = int(w1s)                
+                
+                switchdict[w0] = w1
+                switchdict[w1] = w0
+
     elif len(schoice) == 3:
         # Three character input: command, whisker0, whisker1
         cmd, w0s, w1s = schoice
