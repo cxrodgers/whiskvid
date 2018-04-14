@@ -848,3 +848,217 @@ class Assigner(object):
         self.date_time_stop = datetime.datetime.now()
         
         return self.classified_data
+
+
+## Repair
+def evaluate_geometry_costs_by_seg(classifier):
+    ## Re-evaluate the geometry model on all rows
+    # Insert frangle column
+    classifier.classified_data['frangle_bin'] = pandas.cut(
+        classifier.classified_data['frangle'], 
+        classifier.geometry_angle_bins, 
+        labels=False).astype(np.int)        
+
+    # Iterate over frangles
+    geometry_costs_l = []
+    for fab, sub_mwe in classifier.classified_data.groupby('frangle_bin'):
+        # Get corresponding model
+        model = classifier.geometry_fab2model[fab]
+        scaler = classifier.geometry_fab2scaler[fab]
+        
+        # Fit
+        scaled_stf_data = scaler.transform(
+            sub_mwe[classifier.geometry_model_columns].values)
+        proba = model.predict_proba(scaled_stf_data)
+
+        # Store
+        geometry_costs_l.append(pandas.DataFrame(proba, 
+            index=sub_mwe.index, columns=model.classes_))
+    
+    # Concat
+    geometry_costs_by_seg = pandas.concat(geometry_costs_l, axis=0).sort_index()
+
+    # Reindex by all classes in case it never came up
+    all_known_objects = np.sort(classifier.classified_data[
+        'object'].unique().astype(np.int))
+    geometry_costs_by_seg = geometry_costs_by_seg.reindex(all_known_objects, 
+        axis=1) 
+    geometry_costs_by_seg.columns.name = 'object'
+    geometry_costs_by_seg.index.name = 'mwe_index'
+    
+    # log10
+    geometry_costs_by_seg = np.log10(1e-6 + geometry_costs_by_seg)
+
+    return geometry_costs_by_seg
+
+def evaluate_streak_likelihood(geometry_costs_by_seg, classifier):
+    """Calculate the likelihood of every streak under its classification
+    
+    Also calculates the max possible likelihood if every segment in this
+    streak could be arbitrarily assigned.
+    """
+    # Extract the max likelihood of each seg if it could be any object
+    max_lk = geometry_costs_by_seg.max(1)
+    max_lk.name = 'max_lik'
+    argmax_lk = geometry_costs_by_seg.idxmax(1)
+    argmax_lk.name = 'max_obj'
+    
+    # Extract the likelihood of each seg under the assigned object
+    assigned_lk_idxs = np.ravel_multi_index((
+        np.arange(len(geometry_costs_by_seg), dtype=np.int), 
+        classifier.classified_data['object'].values.astype(np.int)), 
+        geometry_costs_by_seg.shape)
+    assigned_lk = geometry_costs_by_seg.values.flatten()[
+        assigned_lk_idxs]
+    
+    # Concat
+    lks = pandas.concat([
+        max_lk, argmax_lk,
+        pandas.Series(assigned_lk, index=geometry_costs_by_seg.index,
+            name='assigned_lik'),
+        pandas.Series(classifier.classified_data['object'].values, 
+            index=classifier.classified_data.index,
+            name='assigned_obj'),
+        classifier.classified_data['streak'],
+        classifier.classified_data['frame'],
+        ], axis=1, verify_integrity=True)
+    
+    # Sum within streak
+    streak_sum_lks = lks.groupby('streak')[['assigned_lik', 'max_lik']].sum()
+    
+    # Ratio between optimal and assigned
+    streak_sum_lks['llr'] = (streak_sum_lks['assigned_lik'] - 
+        streak_sum_lks['max_lik'])
+
+    return streak_sum_lks
+
+def repair_classifier(classifier, fold_heldout_results=None, verbosity=1,
+    repair_llr_threshold=-3):
+    """Run the repair by atomization algorithm.
+    
+    """
+    # Evaluate geometry costs of each segment
+    geometry_costs_by_seg = evaluate_geometry_costs_by_seg(classifier)
+    
+    # Evaluate likelihood of each streak
+    streak_sum_lks = evaluate_streak_likelihood(geometry_costs_by_seg, 
+        classifier)
+
+    # Identify streaks to fix
+    conflict_streaks = streak_sum_lks.loc[
+        streak_sum_lks['llr'] < repair_llr_threshold, :].sort_values(
+        'llr').index
+    
+    # We'll repair the data in this copy
+    cdata = classifier.classified_data.copy()
+    all_known_objects = np.sort(cdata['object'].astype(np.int).unique())
+    
+    # This one will only accept repairs that are better than original
+    cdata2 = classifier.classified_data.copy()
+
+    # Iterate over the conflict streaks, from worst to best
+    repair_l = []
+    for conflict_streak in conflict_streaks:
+        # Identify affected frames
+        conflict_streak_frames = cdata.loc[cdata['streak'] == conflict_streak,
+            'frame'].unique()
+        
+        if len(conflict_streak_frames) == 0:
+            # Probably already atomized by a previous conflict
+            continue
+
+    
+        ## Nullify object labels in affected frames
+        # Maybe nullify labels in an extra frame on either side to take care
+        # of dependencies?
+        atomize_mask = cdata['frame'].isin(conflict_streak_frames)
+        
+        # Copy a slice for efficiency
+        cccdata = cdata.loc[atomize_mask, :].copy()
+        cccdata.loc[:, 'object'] = np.nan
+        
+        # Break streaks in affected frames
+        new_streak_start = cdata['streak'].max() + 1
+        cccdata.loc[:, 'streak'] = np.arange(
+            new_streak_start, new_streak_start + atomize_mask.sum())
+
+        # Calculate streak2object_ser
+        streak2object_ser = cccdata[
+            ['object', 'streak']].dropna().drop_duplicates(
+            'streak').astype(np.int).set_index('streak')[
+            'object'].sort_index()        
+
+    
+        ## Set up Assigner
+        assigner = Assigner(
+            classified_data=cccdata, 
+            geometry_fab2model=classifier.geometry_fab2model,
+            geometry_angle_bins=classifier.geometry_angle_bins, 
+            geometry_fab2scaler=classifier.geometry_fab2scaler,
+            geometry_model_columns=classifier.geometry_model_columns, 
+            verbosity=0,
+            streak2object_ser=streak2object_ser, 
+            all_known_objects=all_known_objects,
+        )
+        
+        # Run on conflict_streak_frames
+        assigner.run(frame_start=conflict_streak_frames[0])
+        assigner_result = assigner.classified_data
+        
+        # Extract the likelihood of each seg under the newly assigned object
+        repaired_lik_idxs = np.ravel_multi_index((
+            np.where(atomize_mask)[0],
+            assigner_result.loc[atomize_mask, 'object'].values.astype(np.int)), 
+            geometry_costs_by_seg.shape
+        )
+        repaired_lik = geometry_costs_by_seg.values.flatten()[
+            repaired_lik_idxs]
+        repaired_lik_sum = repaired_lik.sum()
+        
+        # Apply result
+        cdata.loc[atomize_mask, 'object'] = assigner_result.loc[
+            atomize_mask, 'object'].astype(np.int)
+
+        # Only apply to cdata2 if better
+        if repaired_lik_sum >= streak_sum_lks.loc[conflict_streak, 'assigned_lik']:
+            better_than_assigned = True
+            cdata2.loc[atomize_mask, 'object'] = assigner_result.loc[
+                atomize_mask, 'object'].astype(np.int)            
+        else:
+            better_than_assigned = False
+        
+        # Measure error rate
+        if fold_heldout_results is not None:
+            error_rate = (fold_heldout_results != 
+                cdata.loc[fold_heldout_results.index, 'object']).mean()
+            error_rate2 = (fold_heldout_results != 
+                cdata2.loc[fold_heldout_results.index, 'object']).mean()
+        else:
+            error_rate = None
+            error_rate2 = None
+
+        # Store results
+        repair_l.append({
+            'conflict_streak': conflict_streak,
+            'repaired_lik_sum': repaired_lik_sum,
+            'repaired_lik_mean': repaired_lik.mean(),
+            'error_rate': error_rate,
+            'error_rate2': error_rate2,
+            'better_than_assigned': better_than_assigned,
+        })
+        if verbosity >= 1:
+            if fold_heldout_results is not None:
+                print "%d/%d %f %f" % (len(repair_l), len(conflict_streaks), 
+                    error_rate, error_rate2)
+            else:
+                print "%d/%d" % (len(repair_l), len(conflict_streaks))
+
+    
+    ## Store back in classifier
+    classifier.repaired_data = cdata
+    classifier.repaired_data2 = cdata2
+    
+    # DataFrame results
+    repaired_df = pandas.DataFrame.from_records(repair_l)
+
+    return classifier, repaired_df, streak_sum_lks
