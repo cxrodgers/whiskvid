@@ -172,12 +172,14 @@ def parse_input(choice):
     
     return result, confirm, munged, unmunged, switchdict
 
-def interactive_curation(keystone_frame, key_frames, classified_data, vs,
+def interactive_curation(keystone_frame, keystone_info, key_frames, classified_data, vs,
     existing_curation_data=None):
     """Interactively collect curation
     
     keystone_frame : frame that defines the object mapping
         It will be displayed on the left
+    keystone_info : assignments in the keystone frame
+        In case the results in classified_data don't match
     key_frames : frames to curate
     classified_data : result of a classifier run
     vs : VideoSession for plotting whiskers
@@ -201,6 +203,10 @@ def interactive_curation(keystone_frame, key_frames, classified_data, vs,
 
     # Plot keystone in left
     frame_data = my.pick_rows(classified_data, frame=keystone_frame)
+    
+    # Assign keystone data, in case it has changed
+    frame_data['object'] = keystone_info['object']
+    
     plot_single_frame(frame_data, axa[0], vs, keystone_frame, ds_ratio=2, 
         key='object')
 
