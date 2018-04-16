@@ -234,6 +234,7 @@ def write_video_with_overlays_from_data(output_filename,
     ffmpeg_writer_kwargs=None,
     f=None, ax=None,
     func_update_figure=None,
+    whisker_lw=2,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -412,7 +413,7 @@ def write_video_with_overlays_from_data(output_filename,
         whisker_handles = frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
             im2, edge_a_obj, contact_positions_l,
-            d_spatial, d_temporal, contact_colors)
+            d_spatial, d_temporal, contact_colors, whisker_lw=whisker_lw)
         
         if func_update_figure is not None:
             func_update_figure(nframe)
