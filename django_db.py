@@ -139,8 +139,9 @@ class VideoSession(object):
     # Other accessors that are not simple short cuts
     @property
     def bsession_name(self):
+        """Get name of bsession. Often used to get trial matrix."""
         #return self._django_object.bsession.name
-        return self._django_object.grand_session.session.logfile
+        return self._django_object.grand_session.session.name
     
     @property
     def fit_b2v(self):
@@ -323,9 +324,9 @@ class VideoSession(object):
         if not force and already_done:
             return
 
-        # Use MCwatch.behavior to get behavior file name locale-specific
-        bdf = MCwatch.behavior.db.get_behavior_df()
-        bfile = bdf.set_index('session').loc[self.bsession_name, 'filename']
+        # Get trial matrix
+        trial_matrix = MCwatch.behavior.db.get_trial_matrix(
+            self.bsession_name, False)
         
         # Monitor video
         video_file = self.data.monitor_video.get_path
@@ -341,7 +342,7 @@ class VideoSession(object):
         
         # Sync it
         sync_res = MCwatch.behavior.syncing.sync_video_with_behavior(
-            bfile=bfile,
+            trial_matrix=trial_matrix,
             lums=lums, 
             video_file=video_file, 
             light_delta=light_delta,
@@ -351,6 +352,7 @@ class VideoSession(object):
             error_if_no_fit=True,
             verbose=verbose,
             return_all_data=True,
+            refit_data=True,
         )
         res = sync_res['b2v_fit']
         lums = sync_res['lums']
@@ -358,11 +360,13 @@ class VideoSession(object):
         # Hack: save the lums to disk here, for debugging
         np.save(lums_filename, lums)
         
+        
         ## Check for syncing problems
         first_bad_trial, max_good_vtime = identify_sync_problems(sync_res)
         if first_bad_trial is not None:
             print "Warning: sync failed"
             print "First bad trial: %d" % first_bad_trial
+        
         
         ## Set sync
         self._django_object.fit_b2v0 = res[0]
