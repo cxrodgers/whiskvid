@@ -139,7 +139,8 @@ class VideoSession(object):
     # Other accessors that are not simple short cuts
     @property
     def bsession_name(self):
-        return self._django_object.bsession.name
+        #return self._django_object.bsession.name
+        return self._django_object.grand_session.session.logfile
     
     @property
     def fit_b2v(self):
@@ -261,6 +262,9 @@ class VideoSession(object):
         #~ We also copy the logfile into the video session and set the
         #~ field 'bsession_logfilename'. This is a bit redundant.
         """
+        # This should be done at the grand session level now
+        1/0
+        
         # Skip if it already exists
         if not force and self._django_object.bsession is not None:
             return
