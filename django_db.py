@@ -361,13 +361,6 @@ class VideoSession(object):
         np.save(lums_filename, lums)
         
         
-        ## Check for syncing problems
-        first_bad_trial, max_good_vtime = identify_sync_problems(sync_res)
-        if first_bad_trial is not None:
-            print "Warning: sync failed"
-            print "First bad trial: %d" % first_bad_trial
-        
-        
         ## Set sync
         self._django_object.fit_b2v0 = res[0]
         self._django_object.fit_b2v1 = res[1]
