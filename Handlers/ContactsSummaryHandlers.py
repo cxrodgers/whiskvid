@@ -109,7 +109,8 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         ## Begin handler-specific stuff
         # Load necessary data
         ctac = self.video_session.data.clustered_tac.load_data()
-        cs = self.video_session.data.contacts_summary.load_data()
+        cs = self.video_session.data.contacts_summary.load_data(
+            add_trial_info=False)
         cwe = self.video_session.data.colorized_whisker_ends.load_data()
         
         # Calculate
@@ -148,6 +149,9 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     and clustered_tac. We colorize each tac, and then propagate this
     color to cs. For the last step, we take the most common color of
     tac within that clustered_tac. 
+    
+    Finally, we use the mapping between color_group and whisker in
+    cwe to add a 'whisker' column in the result.
 
     Returns: colorized_contacts_summary
         This is contacts_summary with another column for color
@@ -156,13 +160,35 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     cs = cs.copy()
     ctac = ctac.copy()
     
-    # Assign the color from cwe to clustered_tac
+    # For some reason ctac group is sometimes float
+    if 'group' in ctac.select_dtypes([np.float]).columns:
+        print "warning: ctac group is float"
+        ctac['group'] = ctac['group'].astype(np.int)
+    
+        # Likely cs.index will also be float in this case
+        cs.index = cs.index.astype(np.int)
+    
+    # Drop rows in ctac that are not in cwe
     # ctac shares an index with cwe
+    # Primarily this would be whiskers that are too short to be colorized
+    # But why are there contacts from these whiskers anyway?
+    ctac_not_in_cwe = ~ctac.index.isin(cwe.index)
+    if ctac_not_in_cwe.sum() > 0:
+        print "warning: dropping %d/%d touches from ctac not in cwe" % (
+            ctac_not_in_cwe.sum(), len(ctac))
+        ctac = ctac[~ctac_not_in_cwe].copy()
+        
+        # Also drop the corresponding rows in cs
+        cs = cs[cs.index.isin(ctac['group'])].copy()
+    
+    # Assign the color from cwe to clustered_tac
     ctac['color'] = cwe.loc[ctac.index, 'color_group']
 
     # in debugging, cwe may be truncated
     # so only select the tacs for which we have entries in cwe
     if ctac.color.isnull().any():
+        # This should no longer happen now that the above check is done
+        1/0
         print "warning: dropping nan in ctac before colorizing cs"
         ctac = ctac.dropna()
 
@@ -200,12 +226,25 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     
     # Use the fac that ctac.group is the index of cs
     cs['color'] = chosen_colors['cg']     
+    assert not np.any(cs['color'].isnull())
+
     
-    # again may need to dropna() during debugging
-    if cs.color.isnull().any():
-        print "warning: dropping nan in colorized contacts summary"
-        cs = cs.dropna()
+    ## Also add whisker name
+    # Check that it is unique (other than color group 0 which is unlabeled)
+    nunique = cwe.groupby('color_group')['whisker'].nunique()
+    if 0 in nunique.index:
+        nunique = nunique.drop(0)
+    assert (nunique == 1).all()
     
+    # Infer the names
+    cg2whisker = cwe.groupby('color_group')['whisker'].first()
+    cg2whisker.loc[0] = '?'
+    
+    # Apply
+    cs['whisker'] = cs['color'].map(cg2whisker)
+    assert not np.any(cs['whisker'].isnull())
+    
+    assert cs.index.dtype == np.dtype('int64')
     return cs
 
 def summarize_contacts_nodb(tac_clustered):
