@@ -32,8 +32,9 @@ class MonitorVideoHandler(CalculationHandler):
         return self.video_session.name + '.mkv'
 
 ## Handlers for data that haven't been incorporated into the database yet
-# Need to do this, so that we can easily check which have been generated
-# For now we hard-code the path
+# This is useful for existing datasets that aren't in the database
+# and also because sometimes it's just not worth modifying the database
+# The path is hard-coded in the new_path method of each
 class CalculationHandlerWithoutDb(CalculationHandler):
     """Overload for data not in db
     
@@ -51,8 +52,17 @@ class CalculationHandlerWithoutDb(CalculationHandler):
         return full_filename
     
     def set_path(self):
-        raise NotImplementedError(
-            "set_path not available because this calculation is not in the db")
+        """Return without doing anything, because this is not in the db.
+        
+        This is so that inherited methods like save_data work.
+        
+        Returns: None, rather thatn self.new_path, to indicate that
+        nothing was done.
+        """
+        #~ raise NotImplementedError(
+            #~ "set_path not available because this calculation is not in the db")
+        
+        return
 
 class VideoTrackedWhiskersHandler(CalculationHandlerWithoutDb):
     """Tracked whiskers video. Side effect of trace"""
@@ -62,3 +72,11 @@ class VideoTrackedWhiskersHandler(CalculationHandlerWithoutDb):
     @property
     def new_path(self):
         return self.video_session.name + '.tracked_whiskers.mkv'
+
+class ColorizationKeystoneInfoHandler(CalculationHandlerWithoutDb):
+    """Information about keystone frame
+    
+    Saves as a pickled DataFrame, so no need to override any methods.
+    """
+    _name = 'colorization_keystone_info'
+

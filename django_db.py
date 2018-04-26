@@ -52,12 +52,19 @@ class VideoSession(object):
         
         # Install the handlers
         self.data = HandlerHolder()
-        for handler_class in [TacHandler, AllEdgesHandler, EdgeSummaryHandler,
-            MonitorVideoHandler, ClusteredTacHandler, 
+        for handler_class in [
+            TacHandler, 
+            AllEdgesHandler, 
+            EdgeSummaryHandler,
+            MonitorVideoHandler, 
+            ClusteredTacHandler, 
             ColorizedWhiskerEndsHandler,
             ContactsSummaryHandler,
             VideoTrackedWhiskersHandler,
-            WhiskersTableHandler, ColorizedContactsSummaryHandler]:
+            WhiskersTableHandler, 
+            ColorizedContactsSummaryHandler,
+            ColorizationKeystoneInfoHandler,
+            ]:
             # Init the handler
             handler = handler_class(self)
             
