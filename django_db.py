@@ -64,6 +64,7 @@ class VideoSession(object):
             WhiskersTableHandler, 
             ColorizedContactsSummaryHandler,
             ColorizationKeystoneInfoHandler,
+            ColorizationCuratedNum2Name,
             ]:
             # Init the handler
             handler = handler_class(self)

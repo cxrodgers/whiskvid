@@ -76,7 +76,60 @@ class VideoTrackedWhiskersHandler(CalculationHandlerWithoutDb):
 class ColorizationKeystoneInfoHandler(CalculationHandlerWithoutDb):
     """Information about keystone frame
     
+    This is a DataFrame, indexed like the whiskers table, with columns
+    "frame" (all the same value) and "object" (the object identity of those
+    segments in the keystome frame).
+    
     Saves as a pickled DataFrame, so no need to override any methods.
     """
     _name = 'colorization_keystone_info'
 
+class ColorizationCuratedNum2Name(CalculationHandlerWithoutDb):
+    """Information about curated objects
+    
+    This defines the mapping between object labels and whisker names.
+    Only the whiskers that were curated are included, so not whiskers
+    that were impossible to do (or not worth doing) by eye.
+    
+    It is stored as a simple CSV file (with a space separator): first
+    object id, then whisker name.
+    """
+    _name = 'colorization_curated_num2name'
+    
+    # Override because it's a CSV file
+    def save_data(self, data):
+        """Saves curated_num2name as space-separated CSV.
+        
+        data : pandas Series
+            index: object id (integer)
+            values: whisker name (string)
+        
+        Only manually curated whiskers are included here.
+        
+        Returns: string, full path to written file
+        """
+        filename = self.new_path_full
+        
+        # Save
+        data.to_csv(filename, sep=' ')
+
+        # This should now work
+        return self.get_path
+    
+    # Override because it's a CSV file
+    def load_data(self):
+        """Read curated_num2name
+        
+        This is stored as a CSV file.
+        
+        Returns: pandas.Series
+            index: object id (integer)
+            values: whisker name (string)
+        """
+        filename = self.get_path
+        data = pandas.read_table(filename, sep=' ', header=None, 
+            names=['object', 'whisker'])
+        
+        data = data.set_index('object')['whisker']
+        
+        return data   
