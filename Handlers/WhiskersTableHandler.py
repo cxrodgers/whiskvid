@@ -193,7 +193,7 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         # Exclude one of the two
         # Don't exclude both, because sometimes it's a real whisker counted
         # twice
-        data = data.drop(potentially_overlapping['index1'].values)
+        resdf = resdf.drop(potentially_overlapping['index1'].values)
 
 
     return resdf
