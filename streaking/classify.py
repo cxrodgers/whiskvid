@@ -159,6 +159,8 @@ def find_frame_with_most_simultaneous_streaks(mwe, take=-1):
     take : if -1 take the last one, if -2 take the second to last, etc
         All will have the same number of streaks, so this is a good way to
         get a "better" keystone frame.
+        
+        if 'all': return all frames with max number of streaks, as array
     
     Also inserts streak_length into mwe
     """
@@ -183,7 +185,10 @@ def find_frame_with_most_simultaneous_streaks(mwe, take=-1):
         mwe.frame.isin(frames_with_max_streaks)].groupby('frame')[
         'streak_length'].mean().sort_values()
     
-    frame_start = int(mean_streak_length.index[take])
+    if take == 'all':
+        frame_start = mean_streak_length.index.values
+    else:
+        frame_start = int(mean_streak_length.index[take])
     
     return frame_start
 
