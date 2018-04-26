@@ -71,33 +71,130 @@ class WhiskersTableHandler(CalculationHandler):
 
 def get_masked_whisker_ends_nodb(h5_filename, side, 
     fol_range_x, fol_range_y, length_thresh=75, 
-    verbose=True, add_angle=True):
-    """Return a table of whiskers that has been masked by follicle and length
+    verbose=True, add_angle=True,
+    exclude_perfectly_horizontal=True, exclude_overlapping_tips=True):
+    """Return the whiskers table after applying various inclusion masks.
+    
+    First the data is loaded from the hdf5 file. Then the following masks
+    are applied:
+        * a length threshold
+        * a follicle mask (one end must be in the follicle ROI)
+        * the whisker should not be perfectly horizontal
+          This is usually an artefact
+        * two whiskers in the same frame cannot have identical tip locations
+          This is usually an artefact
+    
+    Parameters
+    ----------
+    h5_filename : filename of hdf5 file
+    side : face side
+    fol_range_x, fol_range_y : tuples
+        This specifies the rectangular ROI in which the follicle should be
+        located
+    verbose : if True, print out information about how many rows are
+        included / excluded
+    add_angle : if True, calculate the angle between follicle and tip and
+        add as an "angle" column
+    exclude_perfectly_horizontal : if True, exclude whiskers that are
+        "perfectly horizontal", meaning either no y-pixel deviates by more
+        than .0001 pixel, or there are 3 or fewer unique y-pixel values
+    exculde_overlapping_tips : if True, exclude one whisker from every pair
+        of whiskers in the same frame with identical tip locations. Identical
+        means with 0.5 pixels of each other in X and Y.
 
-    add_angle: uses the arctan2 method to add an angle column
+    Returns: DataFrame
+        The index matches the HDF5 file.
+        The columns are: chunk_start, fol_x, fol_y, seg, pixlen, frame,
+            tip_x, tip_y, length, angle
+
     """
-    # Get the ends
+    ## Get the ends
     resdf = get_whisker_ends_hdf5(h5_filename, side=side)
     if verbose:
         print "whisker rows: %d" % len(resdf)
 
-    # Drop everything < thresh
+    
+    ## Drop everything < thresh
     resdf = resdf[resdf['length'] >= length_thresh]
     if verbose:
         print "whisker rows after length: %d" % len(resdf)
 
-    # Follicle mask
+    
+    ## Follicle mask
     resdf = resdf[
         (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
         (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
     if verbose:
         print "whisker rows after follicle mask: %d" % len(resdf)    
 
+
+    ## Add angle
     if add_angle:
         # Get angle on each whisker
         resdf['angle'] = np.arctan2(
             -(resdf['fol_y'].values - resdf['tip_y'].values),
             resdf['fol_x'].values - resdf['tip_x'].values) * 180 / np.pi
+
+
+    ## Exclude perfectly horizontal whiskers
+    # eg row 468769 in 170309_KM91
+    if exclude_perfectly_horizontal:
+        # Identify candidates by tip and follicle location
+        potentially_horizontal = resdf.loc[
+            (resdf['tip_y'] - resdf['fol_y']).abs() < .0001]
+        
+        # Verify candidates by examining all pixels
+        horiz_l = []
+        with tables.open_file(h5_filename) as wfh:
+            for idx in potentially_horizontal.index:
+                # Get the y-values
+                py = wfh.root.pixels_y[idx]
+                
+                # Get max deviation
+                max_dev = np.abs(py - py.mean()).max()
+                
+                # Get n unique values
+                n_unique = len(np.unique(py))
+                
+                # Discard if max_dev is below threshold or not many n_unique
+                if max_dev < .0001 or n_unique <= 3:
+                    horiz_l.append(idx)
+        
+        # Discard
+        resdf = resdf.drop(horiz_l)
+
+
+    ## Exclude overlapping whiskers
+    # eg frame 5051 in 170309_KM91
+    if exclude_overlapping_tips:
+        # Merge on frame
+        merged = pandas.merge(
+            resdf[['tip_x', 'tip_y', 'fol_x', 'fol_y', 'frame']].reset_index(),
+            resdf[['tip_x', 'tip_y', 'fol_x', 'fol_y', 'frame']].reset_index(),
+            on='frame', suffixes=('0', '1'))
+        
+        # Don't compare row to itself, or more than once to another
+        merged = merged.loc[merged['index0'] < merged['index1']]
+        
+        # Calculate distance between tip and follicle
+        merged['dtx'] = merged['tip_x0'] - merged['tip_x1']
+        merged['dty'] = merged['tip_y0'] - merged['tip_y1']
+        merged['dfx'] = merged['fol_x0'] - merged['fol_x1']
+        merged['dfy'] = merged['fol_y0'] - merged['fol_y1']
+        
+        # Exclude those with overlapping tips
+        # Ideally we would examine the underlying pixels, but that's too
+        # much work
+        # Allow those with overlapping follicles (often doublets)
+        potentially_overlapping = merged.loc[
+            (merged['dtx'].abs() < .5) & (merged['dty'].abs() < .5)
+        ]
+        
+        # Exclude one of the two
+        # Don't exclude both, because sometimes it's a real whisker counted
+        # twice
+        data = data.drop(potentially_overlapping['index1'].values)
+
 
     return resdf
 
