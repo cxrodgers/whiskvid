@@ -111,13 +111,13 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
     ## Get the ends
     resdf = get_whisker_ends_hdf5(h5_filename, side=side)
     if verbose:
-        print "whisker rows: %d" % len(resdf)
+        print "%d whisker rows to start" % len(resdf)
 
     
     ## Drop everything < thresh
     resdf = resdf[resdf['length'] >= length_thresh]
     if verbose:
-        print "whisker rows after length: %d" % len(resdf)
+        print "%d rows after length mask" % len(resdf)
 
     
     ## Follicle mask
@@ -125,7 +125,7 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
         (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
     if verbose:
-        print "whisker rows after follicle mask: %d" % len(resdf)    
+        print "%d rows after follicle mask" % len(resdf)    
 
 
     ## Add angle
@@ -163,6 +163,9 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         # Discard
         resdf = resdf.drop(horiz_l)
 
+        if verbose:
+            print "%d rows after horizontal mask" % len(resdf)    
+
 
     ## Exclude overlapping whiskers
     # eg frame 5051 in 170309_KM91
@@ -195,6 +198,8 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         # twice
         resdf = resdf.drop(potentially_overlapping['index1'].values)
 
+        if verbose:
+            print "%d rows after overlapping mask" % len(resdf)    
 
     return resdf
 
