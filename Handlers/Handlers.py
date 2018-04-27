@@ -133,3 +133,19 @@ class ColorizationCuratedNum2Name(CalculationHandlerWithoutDb):
         data = data.set_index('object')['whisker']
         
         return data   
+
+class ColorizationCurated(CalculationHandlerWithoutDb):
+    """Curated object labels"""
+    _name = 'colorization_curated'
+    
+class ColorizationPredictions(CalculationHandlerWithoutDb):
+    """Curated object labels"""
+    _name = 'colorization_predictions'
+
+class ColorizationRepairedResults(CalculationHandlerWithoutDb):
+    """Curated object labels"""
+    _name = 'colorization_repaired_results'
+
+class ColorizationHeldoutResults(CalculationHandlerWithoutDb):
+    """Curated object labels"""
+    _name = 'colorization_heldout_results'

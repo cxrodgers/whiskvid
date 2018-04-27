@@ -65,6 +65,10 @@ class VideoSession(object):
             ColorizedContactsSummaryHandler,
             ColorizationKeystoneInfoHandler,
             ColorizationCuratedNum2Name,
+            ColorizationCurated,
+            ColorizationPredictions,
+            ColorizationHeldoutResults,
+            ColorizationRepairedResults,
             ]:
             # Init the handler
             handler = handler_class(self)
