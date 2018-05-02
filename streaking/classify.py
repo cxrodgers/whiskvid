@@ -602,7 +602,7 @@ class Classifier(object):
             if n_geo_rows_last_update is None or (
                 n_geo_rows >= 1.01 * n_geo_rows_last_update):
                 
-                if self.verbosity >= 1:
+                if self.verbosity >= 2:
                     print ("%07d info: updating geometry model" % 
                         self.current_frame)
                 
@@ -610,7 +610,7 @@ class Classifier(object):
                 self.update_geometry_model()
                 n_geo_rows_last_update = n_geo_rows
 
-                if self.verbosity >= 1:
+                if self.verbosity >= 2:
                     print ("%07d info: done updating geometry model" % 
                         self.current_frame)
             
