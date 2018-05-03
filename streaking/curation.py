@@ -11,6 +11,9 @@ def plot_single_frame(frame_data, ax, vs, frame_number, ds_ratio=2,
     colors=None, key='object'):
     """Plot frame with whiskers overlaid
     
+    ds_ratio : how to downsample
+        Typically looks best at 2 with typical axis size
+    
     Returns: ax, res
     """
     # Get colors
@@ -172,8 +175,9 @@ def parse_input(choice):
     
     return result, confirm, munged, unmunged, switchdict
 
-def interactive_curation(keystone_frame, keystone_info, key_frames, classified_data, vs,
-    existing_curation_data=None):
+def interactive_curation(keystone_frame, keystone_info, key_frames, 
+    classified_data, vs,
+    existing_curation_data=None, curated_num2name=None):
     """Interactively collect curation
     
     keystone_frame : frame that defines the object mapping
@@ -184,6 +188,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames, classified_d
     classified_data : result of a classifier run
     vs : VideoSession for plotting whiskers
     existing_curation_data : previously curated results (DataFrame)
+    curated_num2name : used to title keystone frame
     
     Returns: curation_data, munged_frames
         curation_data : An updated version of existing_curation_data
@@ -199,7 +204,8 @@ def interactive_curation(keystone_frame, keystone_info, key_frames, classified_d
     plt.ion()
     
     # Handles
-    f, axa = plt.subplots(1, 2, figsize=(9, 4))
+    f, axa = plt.subplots(1, 3, figsize=(11.5, 4))
+    f.subplots_adjust(left=.03, right=.97)
 
     # Plot keystone in left
     frame_data = my.pick_rows(classified_data, frame=keystone_frame)
@@ -207,10 +213,29 @@ def interactive_curation(keystone_frame, keystone_info, key_frames, classified_d
     # Assign keystone data, in case it has changed
     frame_data['object'] = keystone_info['object']
     
-    plot_single_frame(frame_data, axa[0], vs, keystone_frame, ds_ratio=2, 
+    
+    ## Plot keystone frame
+    plot_single_frame(frame_data, axa[0], vs, keystone_frame,
         key='object')
+    
+    # Title the keystone frame
+    if curated_num2name is None:
+        # Session and keystone only
+        axa[0].set_title('%s %d' % (
+            vs.name, keystone_frame),
+            size='small',
+        )    
+    else:
+        # Session, keystone and whiskers names
+        curated_string = ";".join(['='.join(map(str, nn)) 
+            for nn in curated_num2name.iteritems()])
+        axa[0].set_title('%s %d %s' % (
+            vs.name, keystone_frame, curated_string),
+            size='small',
+        )
+   
 
-    # Convert curation results to dict for backwards compatibility
+    ## Convert curation results to dict for backwards compatibility
     curated_results_d = {}
     if existing_curation_data is not None:
         for frame in existing_curation_data.index.levels[0]:
@@ -269,11 +294,28 @@ def interactive_curation(keystone_frame, keystone_info, key_frames, classified_d
         
         # Clear axis and then plot single frame
         clear_axis(axa[1])
-        plot_single_frame(frame_data, axa[1], vs, key_frame, ds_ratio=2, 
+        plot_single_frame(frame_data, axa[1], vs, key_frame,
             key='object')
         plt.draw()
 
-        # Get answer
+        
+        ## Image only, no overlays
+        # Get the same image
+        im = axa[1].images[0].get_array()
+        
+        # Clear the third axis
+        clear_axis(axa[2])
+        
+        # Plot into third axis
+        my.plot.imshow(im, ax=axa[2], cmap=plt.cm.gray, 
+            xd_range=(0, vs.frame_width),
+            yd_range=(0, vs.frame_height),
+        )
+        axa[2].axis('image')          
+        plt.draw()
+
+        
+        ## Get answer
         choice = raw_input("[c]onfirm / [f]orward / [b]ack / "
             "[m]ung / un[M]ung / [q]uit / next [u]nconfirmed / [sXY]switch: ")
         
