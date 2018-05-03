@@ -25,20 +25,20 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
     #~ model = sklearn.svm.SVC(kernel='linear', class_weight='balanced', 
         #~ probability=True, decision_function_shape='ovr')
 
-    if model_typ == 'sgd':
-        # Build SGD model of the geometry
-        # This permits partial_fit, but seems to be enough faster anyway not to
-        # need it
-        model = sklearn.linear_model.SGDClassifier(
-            fit_intercept=False, # data will be scaled
-            max_iter=1000, tol=1e-3, # to avoid warnings
-            loss='log', # to permit probability estimate
-            class_weight='balanced',
-        )
-    elif model_typ == 'nb':
-        model = sklearn.naive_bayes.GaussianNB()
-    else:
-        1/0
+    #~ if model_typ == 'sgd':
+        #~ # Build SGD model of the geometry
+        #~ # This permits partial_fit, but seems to be enough faster anyway not to
+        #~ # need it
+        #~ model = sklearn.linear_model.SGDClassifier(
+            #~ fit_intercept=False, # data will be scaled
+            #~ max_iter=1000, tol=1e-3, # to avoid warnings
+            #~ loss='log', # to permit probability estimate
+            #~ class_weight='balanced',
+        #~ )
+    #~ elif model_typ == 'nb':
+        #~ model = sklearn.naive_bayes.GaussianNB()
+    #~ else:
+        #~ 1/0
 
 
     ## Only fit known objects
@@ -47,14 +47,33 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
     
 
     ## Determine angle bins
+    # Mean angle within frames
     frame2angle = mwe2.groupby('frame')['frangle'].mean()
-    angle_bins = frame2angle.quantile(np.linspace(0, 1, multi_angle_bins)).values
-    angle_bins[0] = -np.inf
-    angle_bins[-1] = np.inf
 
-    ## Bin data by angle
-    mwe2['frangle_bin'] = pandas.cut(mwe2['frangle'], angle_bins, 
-        labels=False).astype(np.int)
+    # Iterate until good angle_bins found
+    # Need at least n_splits (3) datapoints per frangle_bin to avoid errors
+    try_multi_angle_bins = multi_angle_bins
+    while True:
+        # Bin angle
+        angle_bins = frame2angle.quantile(
+            np.linspace(0, 1, try_multi_angle_bins)).values
+        
+        # Make the first and last bins extend to infinity
+        angle_bins[0] = -np.inf
+        angle_bins[-1] = np.inf
+
+        # Bin data by angle
+        mwe2['frangle_bin'] = pandas.cut(mwe2['frangle'], angle_bins, 
+            labels=False).astype(np.int)
+        
+        # Break if it's good
+        if mwe2['frangle_bin'].value_counts().min() > 10:
+            break
+        
+        # Otherwise decrement
+        try_multi_angle_bins -= 1
+        if try_multi_angle_bins <= 1:
+            raise ValueError('cannot find good multi angle bins')
 
 
     ## Fit separate models for each angle bin
