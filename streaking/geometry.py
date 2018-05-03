@@ -52,6 +52,8 @@ def update_geometry(mwe, geometry_model_columns, key='object', model_typ='nb',
 
     # Iterate until good angle_bins found
     # Need at least n_splits (3) datapoints per frangle_bin to avoid errors
+    # Actually I don't know what it has to be, make the cutoff 10. I think
+    # it depens on how the cross-validation / calibration works.
     try_multi_angle_bins = multi_angle_bins
     while True:
         # Bin angle
