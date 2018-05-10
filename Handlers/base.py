@@ -1,5 +1,7 @@
 import pandas
 import os
+import datetime
+import shutil
 
 class Error(Exception):
     """Base class for exceptions in this module"""
@@ -145,13 +147,18 @@ class CalculationHandler(object):
                 # This should now work
                 return self.get_path
 
-    def load_data(self):
+    def load_data(self, filename=None):
         """Read data or raise IOError
+        
+        filename : Use this to override the normal filename
+            If None, uses self.get_path
         
         This implementation uses pandas.read_pickle, as does save_data.
         Override if another method is desired.
         """
-        filename = self.get_path
+        if filename is None:
+            filename = self.get_path
+        
         try:
             data = pandas.read_pickle(filename)
         except (KeyError, IOError):
@@ -159,7 +166,7 @@ class CalculationHandler(object):
             raise IOError("cannot read pickle at %s" % filename)
         return data   
     
-    def save_data(self, data):
+    def save_data(self, data, clobber_action='backup', clobber_warn=True):
         """Save data to disk and set the database path.
         
         Saves data to the location specified in self.new_path. Then calls
@@ -170,9 +177,45 @@ class CalculationHandler(object):
         This implementation uses pandas.to_pickle. Override if another
         method is desired.
         
+        
+        data : the data to save
+
+        clobber_action : string
+            This only matters if the file already exists.
+            If 'error' : raise exception
+            If 'backup' : backup the old file
+            If 'clobber' : overwrite the old file
+
+        clobber_warn : boolean
+            If False, silently performs clobber_action
+            If True, print warning before performing clobber_action
+        
+        
         Returns: string, full path to written file
         """
         filename = self.new_path_full
+        
+        # Determine if we are clobbering
+        if os.path.exists(filename):
+            if clobber_action == 'error':
+                raise IOError("file %s already exists" % filename)
+            
+            elif clobber_action == 'backup':
+                # Generate backup filename
+                now_string = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+                backup_filename = filename + '.%s.backup' % now_string
+                
+                # Warn
+                if clobber_warn:
+                    print "warning: backing up %s" % backup_filename
+                
+                # Do the backup
+                shutil.copyfile(filename, backup_filename)
+                
+            elif clobber_action == 'clobber':
+                # Warn
+                if clobber_warn:
+                    print "warning: clobbering %s" % filename
         
         # Save
         try:
