@@ -149,3 +149,7 @@ class ColorizationRepairedResults(CalculationHandlerWithoutDb):
 class ColorizationHeldoutResults(CalculationHandlerWithoutDb):
     """Curated object labels"""
     _name = 'colorization_heldout_results'
+
+class CWE_with_kappa(CalculationHandlerWithoutDb):
+    """Copy of cwe with kappa added"""
+    _name = 'cwe_with_kappa'
