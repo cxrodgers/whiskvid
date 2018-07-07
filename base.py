@@ -84,7 +84,8 @@ def load_measurements(measure_file, convert_to_int=True, set_index=True):
             angle, curv, fol_x, fol_y, tip_x, tip_y        
         Then ['frame', 'wid'] are set to be the index (see above)
     """
-    tmt = traj.MeasurementsTable(measure_file)
+    # Measurements filename cannot be unicode, for some reason
+    tmt = traj.MeasurementsTable(str(measure_file))
     tmt_arr = tmt.asarray()
     tmtdf = pandas.DataFrame(tmt_arr,
         columns=['smask', 'frame', 'wid', 'path_length', 'score',
