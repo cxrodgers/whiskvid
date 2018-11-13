@@ -75,8 +75,13 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
     exclude_perfectly_horizontal=True, exclude_overlapping_tips=True):
     """Return the whiskers table after applying various inclusion masks.
     
-    First the data is loaded from the hdf5 file. Then the following masks
-    are applied:
+    First the data is loaded from the hdf5 file, using get_whisker_ends_hdf5
+    which switches tip and follicle according to face side. (Note that this
+    can result in rare errors where the tip is right of the follicle at the
+    most extreme position. Should use in the follicle mask to determine tip
+    and follicle instead.)
+    
+    Then the following masks are applied:
         * a length threshold
         * a follicle mask (one end must be in the follicle ROI)
         * the whisker should not be perfectly horizontal
@@ -264,7 +269,10 @@ def get_whisker_ends_hdf5(hdf5_file=None, side=None,
 
 ## More HDF5 stuff
 def get_summary(h5file):
-    """Return summary metadata of all whiskers"""
+    """Return summary metadata of all whiskers
+    
+    Note that the tip and follicle may still need to be switched!
+    """
     return pandas.DataFrame.from_records(h5file.root.summary.read())
 
 def get_x_pixel_handle(h5file):
