@@ -43,6 +43,7 @@ WHISKER_COLOR_ORDER_K = [
     'k', 'b', 'g', 'r', 'c', 'm', 'y', 'pink', 'orange',
     'crimson', 'lime', 'darksalmon']
 GLOBAL_WHISKER2COLOR = {
+    'C0': 'blue',
     'b': 'blue', 'g': 'blue', 'C1': 'green', 'C2': 'red', 'C3': 'cyan',
     'C4': 'magenta'}
 
