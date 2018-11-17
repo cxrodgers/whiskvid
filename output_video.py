@@ -130,10 +130,11 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
         
         sub_summary = whiskers_table[whiskers_table[FRAME_LABEL] == nframe]
         for idx, row in sub_summary.iterrows():
-            if 'color_group' in row:
-                color = contact_colors[int(row['color_group'])]
-            else:
+            try:
+                color = whiskvid.GLOBAL_WHISKER2COLOR[row['whisker']]
+            except KeyError:
                 color = 'yellow'
+
             line, = ax.plot(
                 whiskers_file_handle.root.pixels_x[idx],
                 whiskers_file_handle.root.pixels_y[idx],
