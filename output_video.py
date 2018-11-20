@@ -17,7 +17,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
     im2, edge_a_obj, contact_positions_l,
     d_spatial, d_temporal, contact_colors,
-    truncate_edge_y=100, whisker_lw=1):
+    truncate_edge_y=100, whisker_lw=1, whisker_marker=None):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -138,7 +138,8 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             line, = ax.plot(
                 whiskers_file_handle.root.pixels_x[idx],
                 whiskers_file_handle.root.pixels_y[idx],
-                color=color, lw=whisker_lw)
+                color=color, lw=whisker_lw, marker=whisker_marker, 
+                mfc='none', ms=12)
             whisker_handles.append(line)
             #~ line, = ax.plot([row['fol_x']], [row['fol_y']], 'gs')
             #~ whisker_handles.append(line)
@@ -235,7 +236,7 @@ def write_video_with_overlays_from_data(output_filename,
     ffmpeg_writer_kwargs=None,
     f=None, ax=None,
     func_update_figure=None,
-    whisker_lw=2,
+    whisker_lw=2, whisker_marker=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -414,7 +415,8 @@ def write_video_with_overlays_from_data(output_filename,
         whisker_handles = frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
             im2, edge_a_obj, contact_positions_l,
-            d_spatial, d_temporal, contact_colors, whisker_lw=whisker_lw)
+            d_spatial, d_temporal, contact_colors, whisker_lw=whisker_lw,
+            whisker_marker=whisker_marker)
         
         if func_update_figure is not None:
             func_update_figure(nframe)
