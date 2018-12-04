@@ -91,6 +91,10 @@ class VideoSession(object):
         django_vsession = whisk_video.models.VideoSession.objects.filter(
             name=name).first()
         
+        if django_vsession is None:
+            raise ValueError(
+                "cannot find django VideoSession with name %s" % name)
+        
         # Initialize object from that
         return VideoSession(django_vsession, 
             forced_root_directory=forced_root_directory, **kwargs)
