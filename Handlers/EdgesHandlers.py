@@ -100,7 +100,7 @@ class AllEdgesHandler(CalculationHandler):
         return self.get_path
     
     def choose_manual_params(self, force=False, crop_start=100.,
-        crop_stop=7000., crop_n_frames=25):
+        crop_stop=None, crop_n_frames=25):
         """Interactively get the necessary manual params
         
         This is a two-stage process. First we simply plot a subset of the
@@ -120,6 +120,13 @@ class AllEdgesHandler(CalculationHandler):
         
         # Get the edge roi, lumthresh, and face side
         monitor_video_filename = self.video_session.data.monitor_video.get_path
+        
+        # Set the crop stop
+        if crop_stop is None:
+            crop_stop = (my.video.get_video_duration2(monitor_video_filename) 
+                - 100.0)
+        
+        # Choose the params
         manual_params = choose_manual_params_nodb(
             monitor_video_filename, interactive=True,
             side=vs_obj.get_param_face_side_display(),
@@ -467,6 +474,9 @@ def find_edge_of_shape(frame,
     Returns: bottom edge, as sequence of (y, x) (or row, col) pairs
         If no acceptable object is found, returns None.
     """
+    if frame is None:
+        raise ValueError("frame cannot be None")
+    
     # Segment image
     binframe = frame < lum_threshold
     
@@ -687,15 +697,6 @@ def choose_manual_params_nodb(video_file, interactive=True,
         func='keep', frame_chunk_sz=1000, verbose=True, finalize='listcomp')
     idxs = np.argsort([keep_roi(frame).min() for frame in frames_a])
 
-    # Plot it so we can set params
-    f, axa = plt.subplots(3, 3)
-    for good_frame, ax in zip(frames_a[idxs[::100]], axa.flatten()):
-        im = my.plot.imshow(good_frame, axis_call='image', ax=ax)
-        im.set_clim((0, 255))
-        my.plot.colorbar(ax=ax)
-        my.plot.rescue_tick(ax=ax, x=4, y=5)
-    plt.show()
-
     # Get the shape roi
     res = my.video.choose_rectangular_ROI(video_file, interactive=interactive,
         hints={'x0': edge_x0, 'x1': edge_x1, 'y0': edge_y0, 'y1': edge_y1})
@@ -705,11 +706,22 @@ def choose_manual_params_nodb(video_file, interactive=True,
     for key in res:
         res2['edge_roi_' + key] = res[key]
 
-    # Get the lum_threshold
+
+    ## Get the lum_threshold
+    # Plot it so we can set params
+    f, axa = plt.subplots(3, 3)
+    for good_frame, ax in zip(frames_a[idxs[::100]], axa.flatten()):
+        im = my.plot.imshow(good_frame, axis_call='image', ax=ax)
+        im.set_clim((0, 255))
+        my.plot.colorbar(ax=ax)
+        my.plot.rescue_tick(ax=ax, x=4, y=5)
+    plt.show()
+    
     res2['edge_lumthresh'] = get_int_input_with_default('lumthresh', lumthresh)
 
-    # Get the face side
-    res2['side'] = get_string_input_with_default('face side', side)
+
+    ## Get the face side
+    res2['side'] = get_string_input_with_default('face side', side)\
 
     #~ ## replot figure with params
     #~ f, axa = plt.subplots(3, 3)
@@ -721,6 +733,8 @@ def choose_manual_params_nodb(video_file, interactive=True,
         #~ my.plot.rescue_tick(ax=ax, x=4, y=5)
     #~ plt.show()
 
+    plt.close(f)
+    
     return res2
 
 def choose_crop_params_nodb(video_file, frametimes, 
@@ -774,10 +788,11 @@ def choose_crop_params_nodb(video_file, frametimes,
             debug=True, debug_frametimes=frametimes)    
         
         # Plot result
-        plot_effect_of_crop_params(frametimes, debug_res)
+        f = plot_effect_of_crop_params(frametimes, debug_res)
         
         confirm_input = raw_input("Confirm? [y/N]:")
         if confirm_input.lower().strip() == 'y':
+            plt.close(f)
             break
         
         # Get input
@@ -785,6 +800,9 @@ def choose_crop_params_nodb(video_file, frametimes,
         crop_x1 = get_int_input_with_default('crop_x1', crop_x1)
         crop_y0 = get_int_input_with_default('crop_y0', crop_y0)
         crop_y1 = get_int_input_with_default('crop_y1', crop_y1)
+        
+        # Auto-close figure
+        plt.close(f)
     
     return crop_x0, crop_x1, crop_y0, crop_y1
 
@@ -801,8 +819,8 @@ def plot_effect_of_crop_params(frametimes, debug_res):
     # Plot them
     f, axa = my.plot.auto_subplot(len(frametimes), return_fig=True, 
         figsize=(12, 12))
-    f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True, 
-        figsize=(12, 12))
+    #~ f2, axa2 = my.plot.auto_subplot(len(frametimes), return_fig=True, 
+        #~ figsize=(12, 12))
     nax = 0
     for nax, ax in enumerate(axa.flatten()):
         # Get results for this frame
@@ -824,21 +842,23 @@ def plot_effect_of_crop_params(frametimes, debug_res):
         if edge is not None:
             ax.plot(edge[:, 1], edge[:, 0], 'g-', lw=5)
         
-        # Plot the binframe
-        ax2 = axa2.flatten()[nax]
-        im2 = my.plot.imshow(binframe, ax=ax2, axis_call='image',
-            cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
+        #~ # Plot the binframe
+        #~ ax2 = axa2.flatten()[nax]
+        #~ im2 = my.plot.imshow(binframe, ax=ax2, axis_call='image',
+            #~ cmap=plt.cm.gray)#, extent=(0, v_width, v_height, 0))
         
         # Plot the best object
         ax.set_title("t=%0.1f %s" % (
             frametime, 'NO EDGE' if edge is None else ''), size='small')
     f.suptitle('Frames')
-    f2.suptitle('Binarized frames')
+    #~ f2.suptitle('Binarized frames')
     my.plot.rescue_tick(f=f)
-    my.plot.rescue_tick(f=f2)
+    #~ my.plot.rescue_tick(f=f2)
     f.tight_layout()
-    f2.tight_layout()
+    #~ f2.tight_layout()
     plt.show()    
+    
+    return f
     
 def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
     hist_pix_w=2, hist_pix_h=2, vid_fps=30, offset=-.5):
