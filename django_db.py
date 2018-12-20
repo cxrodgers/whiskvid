@@ -366,7 +366,7 @@ class VideoSession(object):
             diffsize=diffsize, 
             refrac=refrac, 
             assumed_fps=30.,
-            error_if_no_fit=True,
+            error_if_no_fit=False,
             verbose=verbose,
             return_all_data=True,
             refit_data=True,
@@ -376,6 +376,11 @@ class VideoSession(object):
         
         # Hack: save the lums to disk here, for debugging
         np.save(lums_filename, lums)
+        
+        # Warning if no fit found
+        if res is None:
+            print "warning: no fit found"
+            return
         
         
         ## Set sync
