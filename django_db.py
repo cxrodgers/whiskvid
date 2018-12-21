@@ -327,10 +327,19 @@ class VideoSession(object):
         verbose=False, force=False):
         """Sync the behavior file with the monitor video
         
-        Requires 'bsession' and 'monitor_video'
-        Sets 'fit_b2v0' etc.
+        The actual syncing is done by 
+          MCwatch.behavior.syncing.sync_video_with_behavior
+        
+        Requires self.bsession_name and lums. If lums does not exist,
+        it will be calculated, which requires monitor_video.
+        Sets these fields:
+            fit_v2b0, fit_b2v1, fit_v2b0, fit_v2b1
         
         verbose : print out frame number for every chunk as it is processed
+        force : bool
+            If True and the sync already exists, return immediately
+            Else it will be calculated
+            'force' does not propagate to calculation of lums
         """
         # Skip if it already exists
         already_done = (
