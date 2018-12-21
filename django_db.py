@@ -70,6 +70,7 @@ class VideoSession(object):
             ColorizationHeldoutResults,
             ColorizationRepairedResults,
             CWE_with_kappa,
+            FrameMeanLuminances,
             ]:
             # Init the handler
             handler = handler_class(self)
