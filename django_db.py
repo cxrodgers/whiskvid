@@ -346,23 +346,20 @@ class VideoSession(object):
         trial_matrix = MCwatch.behavior.db.get_trial_matrix(
             self.bsession_name, False)
         
-        # Monitor video
-        video_file = self.data.monitor_video.get_path
+        # Calculate lums if they don't exist
+        try:
+            self.data.lums.get_path
+        except IOError:
+            print "calculating lums"
+            self.data.lums.calculate(verbose=verbose)
         
-        # Try to load lums
-        # See below hack
-        # This should be a Handler
-        lums_filename = os.path.join(self._session_directory, 'lums')
-        if os.path.exists(lums_filename + '.npy'):
-            lums = np.load(lums_filename + '.npy')
-        else:
-            lums = None
+        # Load lums
+        lums = self.data.lums.load_data()
         
         # Sync it
         sync_res = MCwatch.behavior.syncing.sync_video_with_behavior(
             trial_matrix=trial_matrix,
             lums=lums, 
-            video_file=video_file, 
             light_delta=light_delta,
             diffsize=diffsize, 
             refrac=refrac, 
@@ -373,10 +370,6 @@ class VideoSession(object):
             refit_data=True,
         )
         res = sync_res['b2v_fit']
-        lums = sync_res['lums']
-        
-        # Hack: save the lums to disk here, for debugging
-        np.save(lums_filename, lums)
         
         # Warning if no fit found
         if res is None:
