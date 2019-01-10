@@ -50,24 +50,6 @@ class ContactsSummaryHandler(CalculationHandler):
         # Store
         self.save_data(contacts_summary)
 
-    def load_data(self, add_trial_info=True, columns_to_join=None):
-        """Load cs and optionally add trial info"""
-        # Parent class to load the raw data
-        res = super(ContactsSummaryHandler, self).load_data()
-
-        # Optionally add trial info
-        if add_trial_info:
-            # Get behavioral data
-            bsession = self.video_session.bsession_name
-            trial_matrix = MCwatch.behavior.db.get_trial_matrix(bsession, True)
-            v2b_fit = self.video_session.fit_v2b
-            
-            # Add it
-            res = whiskvid.add_trial_info_to_video_dataframe(res, trial_matrix, 
-                v2b_fit, df_column='frame_start', 
-                columns_to_join=columns_to_join)
-        
-        return res
 
 class ColorizedContactsSummaryHandler(CalculationHandler):
     """Colorized contacts summmary"""
@@ -123,24 +105,36 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         
         return ccs
     
-    def load_data(self, add_trial_info=True, columns_to_join=None):
+    def load_data(self, add_trial_info=True, columns_to_join=None,
+        trial_matrix=None):
         """Load ccs and optionally add trial info"""
         # Parent class to load the raw data
         res = super(ColorizedContactsSummaryHandler, self).load_data()
 
         # Optionally add trial info
         if add_trial_info:
-            # Get behavioral data
-            bsession = self.video_session.bsession_name
-            trial_matrix = MCwatch.behavior.db.get_trial_matrix(bsession, True)
-            v2b_fit = self.video_session.fit_v2b
+            # Add a trial column, based on where the contact start_frame
+            # fits in the trial_matrix['exact_start_frame'] column
+            res['trial'] = trial_matrix.index[
+                np.searchsorted(
+                    trial_matrix['exact_start_frame'].values, 
+                    res['frame_start'].values
+                ) - 1]               
             
-            # Add it
-            res = whiskvid.add_trial_info_to_video_dataframe(res, trial_matrix, 
-                v2b_fit, df_column='frame_start', 
-                columns_to_join=columns_to_join)
+            if (res['trial'] == -1).any():
+                print "warning: dropping contacts before first trial started"
+                res = res[res['trial'] != -1].copy()
+
+            # Join columns
+            if columns_to_join is None:
+                columns_to_join = [
+                    'rewside', 'servo_pos', 'stepper_pos', 
+                    'isrnd', 'choice', 'outcome',
+                ]
+
+            res = res.join(trial_matrix[columns_to_join], on='trial')
         
-        return res
+        return res 
 
 def colorize_contacts_summary_nodb(ctac, cs, cwe):
     """Colorize the contacts in cs using colorized_whisker_ends
