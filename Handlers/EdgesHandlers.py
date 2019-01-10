@@ -414,7 +414,8 @@ def find_edge_of_shape(frame,
     crop_x0=None, crop_x1=None, crop_y0=None, crop_y1=None,
     lum_threshold=30, roi_x=(320, 640),
     roi_y=(0, 480), size_threshold=1000, edge_getter=get_bottom_edge,
-    meth='largest_in_roi', split_iters=10, debug=False):
+    meth='largest_in_roi', split_iters=10, debug=False,
+    discard_edges_on_boundary=True):
     """Find the left edge of the shape in frame.
     
     This is a wrapper around the other utility functions
@@ -437,6 +438,11 @@ def find_edge_of_shape(frame,
     If debug: returns binframe, best_object, edge, status
         where status is 'none in ROI', 'all too small', or 'good'
         unless status is 'good', best_object and edge are None
+    
+    discard_edges_on_boundary : bool
+        If True, discard any edge for which >=50% of its points lie exactly
+        along the crop boundary. This often happens when a large object
+        covers the crop ROI plus more.
     
     Returns: bottom edge, as sequence of (y, x) (or row, col) pairs
         If no acceptable object is found, returns None.
@@ -503,6 +509,15 @@ def find_edge_of_shape(frame,
     # Get the contour of the object
     best_object = objects == best_id
     edge = edge_getter(best_object)
+
+    # If 50% of the edge is on the edge of the crop_ROI region, discard
+    if (
+        (np.mean(edge[:, 1] == crop_x0) >= 0.5) |
+        (np.mean(edge[:, 1] == crop_x1) >= 0.5) |
+        (np.mean(edge[:, 0] == crop_y0) >= 0.5) |
+        (np.mean(edge[:, 0] == crop_y1) >= 0.5)
+        ):
+        edge = None
 
     if debug:
         return binframe, best_object, edge, 'good'
