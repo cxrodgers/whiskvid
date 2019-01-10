@@ -105,11 +105,31 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         
         return ccs
     
-    def load_data(self, add_trial_info=True, columns_to_join=None,
-        trial_matrix=None):
-        """Load ccs and optionally add trial info"""
+    def load_data(self, filename=None, add_trial_info=True, 
+        columns_to_join=None, trial_matrix=None):
+        """Load ccs and optionally add trial info
+        
+        filename : passed to CalculationHandler to override filename
+        
+        add_trial_info : bool
+            If True, then adds a trial number and optionally joins columns.
+            In this case `trial_matrix` must be provided and have a colun
+            called 'exact_start_frame'
+        
+        columns_to_join : list, or None
+            Only matters if add_trial_info is True.
+            These are the columns to join from trial matrix onto the result,
+            using trial number as a key. If None, the following default is
+            used:
+            'rewside', 'servo_pos', 'stepper_pos', 'isrnd', 'choice', 'outcome'
+        
+        trial_matrix : DataFrame, or None
+            Required if add_trial_info is True, otherwise irrelevant
+            Must have a column 'exact_start_frame'
+        """
         # Parent class to load the raw data
-        res = super(ColorizedContactsSummaryHandler, self).load_data()
+        res = super(ColorizedContactsSummaryHandler, self).load_data(
+            filename=filename)
 
         # Optionally add trial info
         if add_trial_info:
