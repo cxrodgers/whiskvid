@@ -247,38 +247,12 @@ class EdgeSummaryHandler(CalculationHandler):
         'all_edges_filename',
     )
 
-    def load_data(self):
-        """Override load_data to use my.misc.pickle_load"""
-        filename = self.get_path
-        try:
-            data = my.misc.pickle_load(filename)
-        except IOError:
-            raise IOError("no edge_summary found at %s" % filename)
-        return data   
-    
-    def save_data(self, edge_summary):
-        """Save data to disk and set the database path.
-        
-        This override uses my.misc.pickle_dump. See the base class for doc.
-        """
-        filename = self.new_path_full
-        
-        # Save
-        try:
-            my.misc.pickle_dump(edge_summary, filename)
-        except IOError:
-            raise IOError("cannot my.misc.pickle_dump to %s" % filename)
-        
-        # Set path
-        self.set_path()
-    
-        # This should now work
-        return self.get_path
-
-    def calculate(self, force=False, **kwargs):
+    def calculate(self, trial_matrix, force=False, **kwargs):
         """Summarize edges
         
         See calculate_edge_summary_nodb for doc
+        
+        trial_matrix : with rwin_frame added
         
         force : if False and the data exists on disk, returns immediately
             If the data does exist (checked by calling get_path and
@@ -319,15 +293,8 @@ class EdgeSummaryHandler(CalculationHandler):
             raise RequiredFieldsNotSetError(self)
         
         ## Begin handler-specific stuff
-        # Get trial matrix
-        trial_matrix = MCwatch.behavior.db.get_trial_matrix(
-            self.video_session.bsession_name, True)
-
         # Get edges
         edge_a = self.video_session.data.all_edges.load_data()
-        
-        # Get fit
-        b2v_fit = self.video_session.fit_b2v
         
         # Get aspect
         v_width = self.video_session.frame_width
@@ -335,7 +302,7 @@ class EdgeSummaryHandler(CalculationHandler):
         
         # Calculate edge summary
         edge_summary = calculate_edge_summary_nodb(
-            trial_matrix, edge_a, b2v_fit, 
+            trial_matrix, edge_a,
             v_width, v_height, **kwargs)
         
         ## End handler-specific stuff
@@ -860,58 +827,78 @@ def plot_effect_of_crop_params(frametimes, debug_res):
     
     return f
     
-def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height,
-    hist_pix_w=2, hist_pix_h=2, vid_fps=30, offset=-.5):
-    """Extract edges at choice times for each trial type
+def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
+    trial_matrix_frame_col='rwin_frame', hist_pix_w=2, hist_pix_h=2):
+    """Extract edges at rwin time for each trial type
     
     2d-histograms at choice times and saves the resulting histogram
     
-    trial_matrix : must have choice time added in already
+    trial_matrix : must have a column `trial_matrix_frame_col`
     edge_a : array of edge at every frame
-    offset : time relative to choice time at which frame is dumped
+    v_width, v_height : frame size, used to calculate the hist edges
+    hist_pix_w, hist_pix_h : used to calculate the hist edges
+    trial_matrix_frame_col : column in trial_matrix to use to choose
+        the frame to lock onto
     
     Check if there is a bug here when the edge is in the last row and is
     not in the histogram.
     
-    Returns: {
-        'row_edges': row_edges, 'col_edges': col_edges, 
-        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l}    
+    Returns: DataFrame
+        index : MultiIndex of group keys, plus hist rows
+        columns : the hist columns
     """
-    # Convert choice time to frames using b2v_fit
-    choice_btime = np.polyval(b2v_fit, trial_matrix['choice_time'])
-    choice_btime = choice_btime + offset
+    # Drop trials for which we have no data
+    trial_matrix = trial_matrix[~trial_matrix[trial_matrix_frame_col].isnull()
+        ].copy()
     
-    # Convert frame to int, though it will be float if it contains NaN
-    trial_matrix['choice_bframe'] = np.rint(choice_btime * vid_fps)
+    # Intify the frame col
+    if not (
+        trial_matrix[trial_matrix_frame_col] == 
+        trial_matrix[trial_matrix_frame_col].astype(np.int)
+        ).all():
+        raise ValueError("cannot intify frame col in trial matrix")
     
-    # hist2d the edges for each rewside * servo_pos
-    gobj = trial_matrix.groupby(['rewside', 'servo_pos', 'stepper_pos'])
-    rwsd_l, srvpos_l, stppos_l, H_l = [], [], [], []
-    col_edges = np.arange(0, v_width, hist_pix_w)
-    row_edges = np.arange(0, v_height, hist_pix_h)    
-    for (rwsd, srvpos, stppos), subtm in gobj:
-        # Extract the edges at choice time from all trials of this type
+    trial_matrix[trial_matrix_frame_col] = trial_matrix[
+        trial_matrix_frame_col].astype(np.int)
+    
+    # Group the trial matrix
+    group_keys = ['rewside', 'servo_pos', 'stepper_pos']
+    gobj = trial_matrix.groupby(group_keys)
+
+    # Define the histogram edges
+    # This might not be quite right if hist_pix doesn't divide frame size
+    col_edges = np.arange(0, v_width + 1, hist_pix_w, dtype=np.int)
+    row_edges = np.arange(0, v_height + 1, hist_pix_h, dtype=np.int)
+    
+    col_centers = (col_edges[:-1] + col_edges[1:]) / 2.0
+    row_centers = (row_edges[:-1] + row_edges[1:]) / 2.0
+    
+    # hist2d the edges for each group
+    H_l = []
+    H_keys_l = []
+    for subtm_keys, subtm in gobj:
+        # Extract the edges at lock frame from all trials of this type
         n_bad_edges = 0
         sub_edge_a = []
-        for frame in subtm['choice_bframe'].dropna().astype(np.int).values:
-            # Skip ones outside the video
+        for frame in subtm[trial_matrix_frame_col].values:
             if frame < 0 or frame >= len(edge_a):
+                # Skip ones outside the video
                 continue
-            
-            # Count the ones for which no edge was detected
             elif edge_a[frame] is None:
+                # Count the ones for which no edge was detected
                 n_bad_edges = n_bad_edges + 1
                 continue
-            
             else:
+                # Otherwise store
                 sub_edge_a.append(edge_a[frame])
 
         # Warn
         if n_bad_edges > 0:
             print "warning: some edge_a entries are None at choice time"
         if len(sub_edge_a) == 0:
-            print "warning: could not extract any edges for " \
-                "rwsd %s and srvpos %d" % (rwsd, srvpos)
+            print ("warning: could not extract any edges for " 
+                "keys %r" % list(subtm_keys)
+            )
             continue
         
         # Extract rows and cols from sub_edge_a
@@ -922,21 +909,20 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, b2v_fit, v_width, v_height
         H, xedges, yedges = np.histogram2d(row_coords, col_coords,
             bins=[col_edges, row_edges])
         
+        # DataFrame the hist
+        H_df = pandas.DataFrame(H.T, 
+            index=pandas.Index(row_centers, name='row'),
+            columns=pandas.Index(col_centers, name='col'),
+        )
+        
         # Store
-        rwsd_l.append(rwsd)
-        srvpos_l.append(srvpos)
-        stppos_l.append(stppos)
-        H_l.append(H.T)
+        H_keys_l.append(subtm_keys)
+        H_l.append(H_df)
     
-    # Save
-    res = {
-        'row_edges': row_edges, 'col_edges': col_edges, 
-        'H_l': H_l, 'rewside_l': rwsd_l, 'srvpos_l': srvpos_l,
-        'stppos_l': stppos_l
-    }
+    # Concat
+    res = pandas.concat(H_l, keys=H_keys_l, names=group_keys)
+    
     return res
-## End edge summary dumping
-
 
 def filter_edge_summary_by_rewside(edge_summary, rewside):
     """Keep only data for rewside left or right
