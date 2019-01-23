@@ -106,15 +106,15 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         return ccs
     
     def load_data(self, filename=None, add_trial_info=True, 
-        columns_to_join=None, trial_matrix=None):
+        columns_to_join=None, trial_matrix=None, locking_column='start_frame'):
         """Load ccs and optionally add trial info
         
         filename : passed to CalculationHandler to override filename
         
         add_trial_info : bool
             If True, then adds a trial number and optionally joins columns.
-            In this case `trial_matrix` must be provided and have a colun
-            called 'exact_start_frame'
+            In this case `trial_matrix` must be provided and have a column
+            called `locking_column`
         
         columns_to_join : list, or None
             Only matters if add_trial_info is True.
@@ -125,7 +125,7 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         
         trial_matrix : DataFrame, or None
             Required if add_trial_info is True, otherwise irrelevant
-            Must have a column 'exact_start_frame'
+            Must have a column `locking_column`
         """
         # Parent class to load the raw data
         res = super(ColorizedContactsSummaryHandler, self).load_data(
@@ -134,10 +134,10 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
         # Optionally add trial info
         if add_trial_info:
             # Add a trial column, based on where the contact start_frame
-            # fits in the trial_matrix['exact_start_frame'] column
+            # fits in the trial_matrix[locking_column] column
             res['trial'] = trial_matrix.index[
                 np.searchsorted(
-                    trial_matrix['exact_start_frame'].values, 
+                    trial_matrix[locking_column].values, 
                     res['frame_start'].values
                 ) - 1]               
             
