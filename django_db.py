@@ -324,7 +324,7 @@ class VideoSession(object):
         self._django_object.save()
     
     def calculate_sync(self, light_delta=30, diffsize=2, refrac=50, 
-        verbose=False, force=False):
+        verbose=False, force=False, refit_data=True):
         """Sync the behavior file with the monitor video
         
         The actual syncing is done by 
@@ -376,7 +376,7 @@ class VideoSession(object):
             error_if_no_fit=False,
             verbose=verbose,
             return_all_data=True,
-            refit_data=True,
+            refit_data=refit_data,
         )
         res = sync_res['b2v_fit']
         
