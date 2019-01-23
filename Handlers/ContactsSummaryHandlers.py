@@ -133,17 +133,24 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
 
         # Optionally add trial info
         if add_trial_info:
+            # Extract locking columns
+            locking_col = trial_matrix[locking_column].dropna().copy()
+            
             # Add a trial column, based on where the contact start_frame
             # fits in the trial_matrix[locking_column] column
-            res['trial'] = trial_matrix.index[
-                np.searchsorted(
-                    trial_matrix[locking_column].values, 
-                    res['frame_start'].values
-                ) - 1]               
+            res['trial'] = np.searchsorted(
+                locking_col.values, 
+                res['frame_start'].values
+            ) - 1          
             
             if (res['trial'] == -1).any():
                 print "warning: dropping contacts before first trial started"
                 res = res[res['trial'] != -1].copy()
+
+            # Now add the actual trial number
+            # Everything above was an index into trial_matrix, which could
+            # differ if trial_matrix is sliced
+            res['trial'] = locking_col.index[res['trial']]
 
             # Join columns
             if columns_to_join is None:
