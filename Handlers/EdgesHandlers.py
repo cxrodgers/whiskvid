@@ -149,6 +149,17 @@ class AllEdgesHandler(CalculationHandler):
         vs_obj.save()
         
         ## Second stage
+        # If crop manual params already set, use that as the hint
+        # Otherwise use None, which will then use the edge params instead
+        crop_params_init = (
+            vs_obj.param_edge_crop_x0,
+            vs_obj.param_edge_crop_x1,
+            vs_obj.param_edge_crop_y0,
+            vs_obj.param_edge_crop_y1,            
+        )
+        if None in crop_params_init:
+            crop_params_init = None
+        
         # Get the crop manual params
         debug_frametimes = np.linspace(crop_start, crop_stop, crop_n_frames)
         crop_params = choose_crop_params_nodb(
@@ -159,7 +170,7 @@ class AllEdgesHandler(CalculationHandler):
             edge_y0=vs_obj.param_edge_y0, edge_y1=vs_obj.param_edge_y1, 
             lumthresh=vs_obj.param_edge_lumthresh, 
             split_iters=vs_obj.param_edge_split_iters,
-            crop_params_init=None,
+            crop_params_init=crop_params_init,
         )
         
         # Set the crop manual params
