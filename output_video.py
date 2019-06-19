@@ -371,7 +371,7 @@ def write_video_with_overlays_from_data(output_filename,
         frame_width=canvas_width,
         frame_height=canvas_height,
         output_fps=output_fps,
-        pix_fmt='argb',
+        input_pix_fmt='argb',
         write_stderr_to_screen=write_stderr_to_screen,
         **ffmpeg_writer_kwargs
         )
