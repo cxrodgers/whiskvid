@@ -67,7 +67,7 @@ def load_measurements(measure_file, convert_to_int=True, set_index=True):
     2 - wid
     3 - path_length
     4 - median_score
-    5 - angle
+    5 - the "root angle", I think the angle of a few samples around follicle
     6 - curvature
     7, 8 - follicle x and y
     9, 10 - tip x and y
