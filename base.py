@@ -28,6 +28,7 @@ import MCwatch.behavior
 import whiskvid
 import matplotlib.pyplot as plt
 import pandas
+import scipy.optimize
 import kkpandas
 
 try:
@@ -753,3 +754,129 @@ def bin_ccs(ccs, locking_times, trial_labels,
     ).T
     
     return binned_df
+
+def hungarian_preds_joints(frame_predictions, this_frame_traced_joints_df):
+    """Hungarian match up PoseTF and traced joints
+    
+    Returns : assignments, DataFrame
+        index : indices into this_frame_traced_joints_df
+        A column called 'whisker' with whisker names from frame_predictions
+    """
+    # Merge all joints from predictions onto joints
+    merged = pandas.merge(
+        frame_predictions[['c', 'r']].reset_index(),
+        this_frame_traced_joints_df.reset_index(), 
+        on='joint', suffixes=('_posetf', '_trace'), how='outer')
+    assert not merged.isnull().any().any()
+
+    # Cartesian distance between each joint
+    merged['dr'] = merged['r_posetf'] - merged['r_trace']
+    merged['dc'] = merged['c_posetf'] - merged['c_trace']
+    merged['dist'] = np.sqrt(merged['dr'] ** 2 + merged['dc'] ** 2)
+
+    # Mean the distance over joints
+    frame_merged = merged.set_index(
+        ['whisker', 'n_seg', 'joint'])[
+        'dist'].mean(level=['whisker', 'n_seg'])
+    
+    # Put known whisker on columns
+    to_hung = frame_merged.unstack('whisker')
+    assert to_hung.size > 0
+
+    # Run hungarian
+    row_ind, col_ind = scipy.optimize.linear_sum_assignment(
+        to_hung.values)        
+    raveled_idxs = np.ravel_multi_index((row_ind, col_ind), 
+        to_hung.shape)       
+    
+    # Extract assignments
+    matching_n_seg = to_hung.index[row_ind]
+    matching_whisker = to_hung.columns[col_ind]
+    cost_by_assignment = to_hung.values.flatten()[raveled_idxs]
+    assignments = pandas.DataFrame.from_dict(dict([
+        ('whisker', matching_whisker),
+        ('n_seg', matching_n_seg), 
+        ('cost', cost_by_assignment),
+    ])) 
+    assignments = assignments.set_index('n_seg').sort_index()
+    
+    return assignments
+
+def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
+    """Convert a list of X, Y pixels to equally spaced joints
+    
+    pixels_x, pixels_y : array of pixels locations
+    n_joints : how many joints
+    
+    Pixels are rounded, duplicates dropped, and gaps filled before uniformly
+    downsampling to `n_joints` equally spaced joints.
+    
+    Returns: 2d DataFrame of size (n_joints, 2)
+        First column is Y, second column is X
+        Index is joint. It will always go from the beginning to the end
+        of pixels_x and pixels_y, so reverse the order of them if you want.
+    """
+    # Intify the coordinates of every whisker
+    coords = np.rint(np.asarray([pixels_y, pixels_x]).T
+        ).astype(np.int)
+    
+    # DataFrame and drop duplicates
+    cdf = pandas.DataFrame(coords, columns=('y', 'x'))
+    cdf = cdf.drop_duplicates()
+    cdf.index = range(len(cdf))
+
+    # Look for gaps": adjacent co-ordinates that differ by more
+    # than 1 in either X or Y
+    is_gap = (cdf.diff().dropna().astype(np.int).abs() > 1).any(1)
+    
+    # Fix gaps if they exist
+    if is_gap.any():
+        # This is the integer index into coords of the coordinate
+        # after a gap. Will always be > 0 due to dropna above
+        gaps = is_gap.index.values[is_gap.values]
+        
+        # Reindex over gaps
+        new_idxs = []
+        for gap in gaps:
+            # Size of the gap in pixels
+            gapsize = np.sqrt(
+                (cdf.loc[gap - 1:gap].diff().iloc[-1] ** 2).sum()
+            )
+            
+            # Intify
+            gapsize = int(np.ceil(gapsize))
+            
+            # New values to interpolate at
+            new_idxs.append(np.linspace(gap - 1, gap, gapsize + 2)[1:-1])
+        
+        #~ if len(gaps) > 3:
+            #~ print "filling %d gaps on frame %d whisker %s" % (
+                #~ len(gaps), n_frame, whisker_identity)
+        
+        # Reindex and interpolate
+        interpolated = cdf.reindex(cdf.index | np.concatenate(new_idxs))
+        interpolated = interpolated.interpolate(
+            method='linear', limit_direction='both')
+        assert not interpolated.isnull().any().any()
+        
+        # Round and drop duplicates
+        interpolated = interpolated.round().drop_duplicates()
+        
+        # Error-check that gap filling worked
+        is_gap = (interpolated.diff().dropna().astype(
+            np.int).abs() > 1).any(1)
+        assert not is_gap.any()
+        
+        # Extract new coords
+        cdf = interpolated.astype(np.int)
+        cdf.index = range(len(cdf))
+        #~ coords = cdf.values
+
+    
+    ## Take equally spaced
+    idxs = np.rint(np.linspace(0, 1, n_joints) * (len(cdf) - 1)
+        ).astype(np.int)
+    sliced = cdf.iloc[idxs]
+    sliced.index = pandas.Index(range(len(sliced)), name='joint')
+
+    return sliced
