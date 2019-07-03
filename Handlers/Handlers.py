@@ -157,6 +157,10 @@ class CWE_with_kappa(CalculationHandlerWithoutDb):
     """Copy of cwe with kappa added"""
     _name = 'cwe_with_kappa'
 
+class WhiskerJoints(CalculationHandlerWithoutDb):
+    """DataFrame of labeled joints"""
+    _name = 'joints'
+
 class FrameMeanLuminances(CalculationHandlerWithoutDb):
     """The mean luminance of each frame"""
     _name = 'lums'
