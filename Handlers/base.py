@@ -216,6 +216,9 @@ class CalculationHandler(object):
                 # Warn
                 if clobber_warn:
                     print "warning: clobbering %s" % filename
+            
+            else:
+                raise ValueError("unknown clobber action: %s" % clobber_action)
         
         # Save
         try:
