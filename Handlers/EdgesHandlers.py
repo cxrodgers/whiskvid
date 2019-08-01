@@ -854,7 +854,8 @@ def plot_effect_of_crop_params(frametimes, debug_res):
     return f
     
 def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
-    trial_matrix_frame_col='rwin_frame', hist_pix_w=2, hist_pix_h=2):
+    trial_matrix_frame_col='rwin_frame', hist_pix_w=2, hist_pix_h=2,
+    warn_on_missing_edges=False):
     """Extract edges at rwin time for each trial type
     
     2d-histograms at choice times and saves the resulting histogram
@@ -865,6 +866,10 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
     hist_pix_w, hist_pix_h : used to calculate the hist edges
     trial_matrix_frame_col : column in trial_matrix to use to choose
         the frame to lock onto
+    warn_on_missing_edges : bool
+        If True and there are edges missing at choice time or for a certain
+        set of stimuli, print warning. False by default because this always
+        happens during detection task.
     
     Check if there is a bug here when the edge is in the last row and is
     not in the histogram.
