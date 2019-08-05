@@ -75,7 +75,7 @@ class AllEdgesHandler(CalculationHandler):
         """Override load_data because edges_all uses numpy.load"""
         filename = self.get_path
         try:
-            data = np.load(filename)
+            data = np.load(filename, allow_pickle=True)
         except IOError:
             raise IOError("no all_edges found at %s" % filename)
         return data   
@@ -923,13 +923,18 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
                 # Otherwise store
                 sub_edge_a.append(edge_a[frame])
 
-        # Warn
-        if n_bad_edges > 0:
+        # Warn if missing edge_a entries
+        if warn_on_missing_edges and n_bad_edges > 0:
             print "warning: some edge_a entries are None at choice time"
+        
+        # Warn and continue if missing data for this set of keys
         if len(sub_edge_a) == 0:
-            print ("warning: could not extract any edges for " 
-                "keys %r" % list(subtm_keys)
-            )
+            if warn_on_missing_edges:
+                print ("warning: could not extract any edges for " 
+                    "keys %r" % list(subtm_keys)
+                )
+            
+            # Continue if no data for this set of keys
             continue
         
         # Extract rows and cols from sub_edge_a
