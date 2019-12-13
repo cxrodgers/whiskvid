@@ -6,7 +6,6 @@ import my
 import my.plot
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.mlab import prctile
 
 
 
@@ -25,7 +24,7 @@ def plot_transparent_histogram(arr, ax, frame_width, frame_height,
     vals = arr.flatten()
     vals = vals[vals > 0]
     transparent_threshold = vals.min()
-    clim_upper = prctile(vals, upper_prctile_clim)    
+    clim_upper = np.percentile(vals, upper_prctile_clim)    
     
     # Mask the data to make zero bins transparent
     # We use .99 to avoid floating point comparison problems
