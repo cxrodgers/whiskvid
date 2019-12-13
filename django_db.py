@@ -1,6 +1,10 @@
 """Module for interacting with django whisker video database."""
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from builtins import range
+from past.utils import old_div
+from builtins import object
 
 import os
 #~ import shutil
@@ -232,7 +236,7 @@ class VideoSession(object):
         whisker_color_l = self._django_object.whisker_colors.split()
         res = pandas.DataFrame.from_dict({
             'whisker': ['?'] + whisker_color_l,
-            'color_group': range(0, len(whisker_color_l) + 1)
+            'color_group': list(range(0, len(whisker_color_l) + 1))
             })
         
         # Add 'disp_color_k' and 'disp_color_w' colummns
@@ -285,7 +289,7 @@ class VideoSession(object):
         #~ field 'bsession_logfilename'. This is a bit redundant.
         """
         # This should be done at the grand session level now
-        1/0
+        old_div(1,0)
         
         # Skip if it already exists
         if not force and self._django_object.bsession is not None:
@@ -440,7 +444,7 @@ def identify_sync_problems(sync_res):
     residuals = btimes_matched_vbase - video_flash_x
 
     # Convert residuals to real seconds, not spurious timebase
-    residuals = residuals / sync_res['b2v_fit'][0]
+    residuals = old_div(residuals, sync_res['b2v_fit'][0])
 
     # Identify the bad trials
     # 20 ms errors are not uncommon!

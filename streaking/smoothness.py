@@ -1,4 +1,7 @@
 from __future__ import absolute_import
+from __future__ import division
+from builtins import range
+from past.utils import old_div
 import numpy as np
 import pandas
 from . import base
@@ -118,12 +121,12 @@ def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,
         
         # DataFrame
         smoothness_dists_by_alignment = pandas.DataFrame(
-            smoothness_costs_by_alignment_l, index=range(len(alignments))
+            smoothness_costs_by_alignment_l, index=list(range(len(alignments)))
         )
 
     # Convert distance to log probability
-    smoothness_costs_by_alignment = np.log10(1 - (1 / 
-        (1 + np.exp(-(loss_slope * smoothness_dists_by_alignment + loss_icpt)))))
+    smoothness_costs_by_alignment = np.log10(1 - (old_div(1, 
+        (1 + np.exp(-(loss_slope * smoothness_dists_by_alignment + loss_icpt))))))
 
     # Sum over each alignment
     smoothness_costs = smoothness_costs_by_alignment.sum(axis=1)

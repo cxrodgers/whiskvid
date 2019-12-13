@@ -1,6 +1,8 @@
 """Module for handling whiskers table"""
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from past.utils import old_div
 import numpy as np
 import pandas
 from .base import CalculationHandler
@@ -59,7 +61,7 @@ class WhiskersTableHandler(CalculationHandler):
                 print("warning: v2b_fit is null, cannot sync")
             else:
                 # Apply sync
-                mwe['vtime'] = mwe['frame'] / 30.
+                mwe['vtime'] = old_div(mwe['frame'], 30.)
                 mwe['btime'] = np.polyval(v2b_fit, mwe.vtime.values)   
 
         return mwe

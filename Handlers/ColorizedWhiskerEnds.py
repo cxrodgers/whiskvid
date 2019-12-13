@@ -2,6 +2,9 @@
 
 """
 from __future__ import absolute_import
+from __future__ import division
+from builtins import range
+from past.utils import old_div
 
 import pandas
 import numpy as np
@@ -22,7 +25,7 @@ class ColorizedWhiskerEndsHandler(CalculationHandler):
         whisker_colors = (
             self.video_session._django_object.whisker_colors.split())
         whisker_colors_df = pandas.Series(whisker_colors, 
-            index=range(1, len(whisker_colors) + 1))
+            index=list(range(1, len(whisker_colors) + 1)))
 
         # Get sync
         v2b_fit = self.video_session.fit_v2b
@@ -61,7 +64,7 @@ def lock_angle_by_frame_to_triggers(angle_by_frame, v2b_fit, trigger_times,
         raise ValueError("angle_by_frame has duplicates in its index")
 
     # time of each row
-    angle_vtime = angle_by_frame.index.values / 30.
+    angle_vtime = old_div(angle_by_frame.index.values, 30.)
     angle_btime = np.polyval(v2b_fit, angle_vtime)
 
     # Index the angle based on the btime
@@ -72,7 +75,7 @@ def lock_angle_by_frame_to_triggers(angle_by_frame, v2b_fit, trigger_times,
     ## Interpolate angle_by_btime at the new time bins that we want
     # Get absolute time bins
     absolute_time_bins_l = []
-    for trial, trigger_time in trigger_times.iteritems():
+    for trial, trigger_time in trigger_times.items():
         # Get time bins relative to trigger
         absolute_time_bins = relative_time_bins + trigger_time
         absolute_time_bins_l.append(absolute_time_bins)
@@ -134,7 +137,7 @@ def lock_cwe_to_triggers(whisker_colors_df, cwe, v2b_fit, trigger_times,
 
     # Iterate over colors
     color2twa = {}
-    for color, whisker_name in whisker_colors_df.iteritems():
+    for color, whisker_name in whisker_colors_df.items():
         ## Extract data just for this whisker
         angle_by_frame = cwe.loc[cwe.color_group == color, 
             ['frame', 'angle']].set_index('frame')['angle']
@@ -204,7 +207,7 @@ def calculate_histogram_tips_over_whiskers(cwe, color2whisker,
     H_tip_l = []
     whisker_labels = []
     color_groups = []
-    for color, whisker in color2whisker.items():
+    for color, whisker in list(color2whisker.items()):
         # Exclude unlabeled
         if skip_unlabeled and color == 0:
             continue

@@ -56,7 +56,7 @@ def plot_contact_locations_by_whisker(ccs, color2whisker, ax,
         whisker_color_order = whiskvid.WHISKER_COLOR_ORDER_K
     
     # Plot the contact locations
-    for color, whisker in color2whisker.items():
+    for color, whisker in list(color2whisker.items()):
         color_s = whisker_color_order[color]
         sub_ccs = ccs[ccs.color == color]
         ax.plot(sub_ccs.tip_x, sub_ccs.tip_y, color=color_s,
@@ -70,7 +70,7 @@ def plot_contact_locations_by_rewside(ccs, ax, **kwargs):
     
     # Plot the contact locations
     rewside2color_s = {'right': 'r', 'left': 'b'}
-    for rewside, color_s in rewside2color_s.items():
+    for rewside, color_s in list(rewside2color_s.items()):
         sub_ccs = ccs[ccs.rewside == rewside]
         ax.plot(sub_ccs.tip_x, sub_ccs.tip_y, color=color_s,
             **plot_kwargs)
@@ -91,7 +91,7 @@ def plot_whisker_ends_as_points(cwe, color2whisker, ax, typ='tip',
         whisker_color_order = whiskvid.WHISKER_COLOR_ORDER_K
     
     # Separate images for all whisker fols
-    for color, whisker in color2whisker.items():
+    for color, whisker in list(color2whisker.items()):
         sub_cwe = cwe[cwe.color_group == color]
         color_s = whisker_color_order[color]
         ax.plot(

@@ -1,5 +1,10 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from builtins import zip
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import numpy as np
 import pandas
 from . import clumping
@@ -49,18 +54,18 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
         ))
 
     if len(streaks_to_assign) > len(available_objects):
-        1/0
+        old_div(1,0)
     
     ## Define alignments from objects to streaks
     # Pre-assigned streaks
-    pre_assigned_assignments = zip(
+    pre_assigned_assignments = list(zip(
         pre_assigned_streaks.values,
         pre_assigned_streaks.index.values,
-    )
+    ))
     
     if len(available_objects) < len(streaks_to_assign):
         # More streaks than objects, need to add a new object
-        1/0
+        old_div(1,0)
         
     else:
         # More objects than streaks, or the same number
@@ -70,7 +75,7 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
         
         # Zip them up with streaks_to_assign, appending fixed assignments
         alignments = [
-            zip(permuted_objects, streaks_to_assign) + pre_assigned_assignments
+            list(zip(permuted_objects, streaks_to_assign)) + pre_assigned_assignments
             for permuted_objects in permuted_objects_l
         ]
     
@@ -505,9 +510,9 @@ class Classifier(object):
                 print ("%07d info: starting frame" % self.current_frame)
             elif self.verbosity >= 1:
                 # Fraction complete
-                frac_complete = (np.sum(
-                    ~self.classified_data['object'].isnull()) / float(
-                    len(self.classified_data)))
+                frac_complete = (old_div(np.sum(
+                    ~self.classified_data['object'].isnull()), float(
+                    len(self.classified_data))))
                 
                 if frac_complete > self.frac_complete_announce:
                     print ("%07d info: %0.1f%% complete" % (
@@ -683,9 +688,9 @@ class Assigner(object):
         
         elif self.verbosity >= 1:
             # Fraction complete
-            frac_complete = (np.sum(
-                ~self.classified_data['object'].isnull()) / float(
-                len(self.classified_data)))
+            frac_complete = (old_div(np.sum(
+                ~self.classified_data['object'].isnull()), float(
+                len(self.classified_data))))
             
             # Announce and update interval
             if frac_complete > self.frac_complete_announce:

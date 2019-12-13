@@ -1,4 +1,7 @@
 from __future__ import absolute_import
+from __future__ import division
+from builtins import range
+from past.utils import old_div
 import itertools
 import numpy as np
 import pandas
@@ -163,7 +166,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
         gobj = distrs.groupby([key0, key1])['dist']    
         
         # Iterate over pairs of streaks
-        for (streak0, streak1), streak_dist in pd_mean.iteritems():
+        for (streak0, streak1), streak_dist in pd_mean.items():
             # Iterate over pairs of objects
             for (object0, object1), object_dist_distr in gobj:
                 # Skip same object (this shouldn't even be in the data anyway)
@@ -184,7 +187,7 @@ def test_all_alignments_for_ordering(mwe, next_frame_streaks, alignments,
                     sdist = clamp_std
                 
                 # Calculate p-value of data
-                normalized_value = (streak_dist - mdist) / sdist
+                normalized_value = old_div((streak_dist - mdist), sdist)
                 llik = np.log10(2 * (1 - scipy.stats.norm.cdf(
                     np.abs(normalized_value))))
                 
@@ -271,7 +274,7 @@ def test_relationships(mwe, stf_data, distrs, min_data_count=50, clamp_std=10):
 
         # Compare against all remaining rows
         remaining_frame_data = frame_data[~frame_data['object'].isnull()]
-        for idx0, object0 in remaining_frame_data['object'].iteritems():
+        for idx0, object0 in remaining_frame_data['object'].items():
             dist = ls_dist(
                 frame_data.loc[idx0, 'tip_x'],
                 frame_data.loc[idx0, 'tip_y'],
@@ -311,7 +314,7 @@ def test_relationships(mwe, stf_data, distrs, min_data_count=50, clamp_std=10):
             # This doesn't work because the pdf is always really low
             # llik = scipy.stats.norm(mdist, sdist).logpdf(value)
             
-            normalized_value = (value - mdist) / sdist
+            normalized_value = old_div((value - mdist), sdist)
             llik = np.log10(2 * (1 - scipy.stats.norm.cdf(np.abs(normalized_value))))
             rec_l.append((available_object, comparison_object, llik))
     llik_df = pandas.DataFrame.from_records(rec_l, 
@@ -334,8 +337,8 @@ def update_relationships(mwe):
     # calculate line seg dist between every pair of segments
     rec_l = []
     for frame, frame_data in mwe[~mwe.object.isnull()].groupby('frame'):
-        for idx0, object0 in frame_data['object'].iteritems():
-            for idx1, object1 in frame_data['object'].iteritems():
+        for idx0, object0 in frame_data['object'].items():
+            for idx1, object1 in frame_data['object'].items():
                 dist = ls_dist(
                     frame_data.loc[idx0, 'tip_x'],
                     frame_data.loc[idx0, 'tip_y'],
@@ -357,8 +360,8 @@ def update_relationships_iterative(distrs, new_data):
     # calculate line seg dist between every pair of segments
     rec_l = []
     for frame, frame_data in new_data[~new_data.object.isnull()].groupby('frame'):
-        for idx0, object0 in frame_data['object'].iteritems():
-            for idx1, object1 in frame_data['object'].iteritems():
+        for idx0, object0 in frame_data['object'].items():
+            for idx1, object1 in frame_data['object'].items():
                 dist = ls_dist(
                     frame_data.loc[idx0, 'tip_x'],
                     frame_data.loc[idx0, 'tip_y'],

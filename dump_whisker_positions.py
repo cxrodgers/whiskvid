@@ -28,7 +28,7 @@ whisker_id2frame2segment_id = tmt.get_trajectories()
 
 
 # Identify any missing frames
-frames_l = frame2segment_id2whisker_seg.keys()
+frames_l = list(frame2segment_id2whisker_seg.keys())
 sorted_frames = np.sort(frames_l)
 
 # Iterate over frames
@@ -37,9 +37,9 @@ rec_l = []
 # Iterate over whiskers
 # It looks like it numbers them from Bottom to Top for side == 'left'
 # whiski colors them R, G, B
-for wid, frame2segment_id in whisker_id2frame2segment_id.items():
+for wid, frame2segment_id in list(whisker_id2frame2segment_id.items()):
     # Iterate over frames
-    for frame, segment_id in frame2segment_id.items():
+    for frame, segment_id in list(frame2segment_id.items()):
         # Get the actual segment for this whisker and frame
         ws = frame2segment_id2whisker_seg[frame][segment_id]
         

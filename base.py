@@ -17,6 +17,12 @@
 * Plotting stuff, basically part of the pipeline
 """
 from __future__ import print_function
+from __future__ import division
+from builtins import zip
+from builtins import str
+from builtins import map
+from builtins import range
+from past.utils import old_div
 try:
     from whisk.python import traj, trace
 except ImportError:
@@ -415,8 +421,8 @@ def plot_perf_vs_contacts(session):
     data = [perf_n_contacts, perf_y_contacts]
     
     my.plot.vert_bar(ax=ax,
-        bar_lengths=map(np.mean, data),
-        bar_errs=map(np.std, data),
+        bar_lengths=list(map(np.mean, data)),
+        bar_errs=list(map(np.std, data)),
         bar_colors=('b', 'r'),
         bar_labels=('none', 'some'),
         tick_labels_rotation=0,
@@ -432,7 +438,7 @@ def logreg_perf_vs_contacts(session):
     b2v_fit = db.loc[session, ['fit_b2v0', 'fit_b2v1']]
     
     if np.any(pandas.isnull(v2b_fit.values)):
-        1/0
+        old_div(1,0)
 
     # Get trial timings
     trial_matrix['choice_time'] = MCwatch.behavior.misc.get_choice_times(
@@ -591,7 +597,7 @@ def normalize_edge_summary(edge_summary):
         es[edge_summary['row_edges'][:-1] < 100] = 0
         
         # Normalize to max
-        normalized_es_l.append(es / es.max())
+        normalized_es_l.append(old_div(es, es.max()))
     edge_hist2d = np.mean(normalized_es_l, axis=0)
     
     return edge_hist2d
@@ -626,7 +632,7 @@ def add_trial_info_to_video_dataframe(df, trial_matrix, v2b_fit,
     # Convert to behavior time
     # "vtime" is in the spurious 30fps timebase
     # the fits take this into account
-    df['vtime'] = df[df_column] / 30.
+    df['vtime'] = old_div(df[df_column], 30.)
     df['btime'] = np.polyval(v2b_fit, df['vtime'].values)
     
     # Associate each row in df with a trial
@@ -674,7 +680,7 @@ def bin_ccs(ccs, locking_times, trial_labels,
     """
     ## Generate bins
     if nbins is None:
-        nbins = int(np.rint((t_stop - t_start) / binwidth)) + 1
+        nbins = int(np.rint(old_div((t_stop - t_start), binwidth))) + 1
     bins = np.linspace(t_start, t_stop, nbins)
 
     # Choose smoothing meth
@@ -824,7 +830,7 @@ def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
     # DataFrame and drop duplicates
     cdf = pandas.DataFrame(coords, columns=('y', 'x'))
     cdf = cdf.drop_duplicates()
-    cdf.index = range(len(cdf))
+    cdf.index = list(range(len(cdf)))
 
     # Look for gaps": adjacent co-ordinates that differ by more
     # than 1 in either X or Y
@@ -870,7 +876,7 @@ def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
         
         # Extract new coords
         cdf = interpolated.astype(np.int)
-        cdf.index = range(len(cdf))
+        cdf.index = list(range(len(cdf)))
         #~ coords = cdf.values
 
     
@@ -878,6 +884,6 @@ def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
     idxs = np.rint(np.linspace(0, 1, n_joints) * (len(cdf) - 1)
         ).astype(np.int)
     sliced = cdf.iloc[idxs]
-    sliced.index = pandas.Index(range(len(sliced)), name='joint')
+    sliced.index = pandas.Index(list(range(len(sliced))), name='joint')
 
     return sliced

@@ -1,4 +1,8 @@
 from __future__ import print_function
+from __future__ import division
+from builtins import zip
+from builtins import map
+from past.utils import old_div
 import numpy as np
 import pandas
 import numpy as np
@@ -17,8 +21,8 @@ def ls_dist(xA_0, yA_0, xB_0, yB_0, xA_1, yA_1, xB_1, yB_1):
     where delta_m is the difference in slopes and delta_intercept is 
     the difference in intercepts
     """
-    m0 = (yB_0 - yA_0) / float(xB_0 - xA_0)
-    m1 = (yB_1 - yA_1) / float(xB_1 - xA_1)
+    m0 = old_div((yB_0 - yA_0), float(xB_0 - xA_0))
+    m1 = old_div((yB_1 - yA_1), float(xB_1 - xA_1))
     b0 = yB_0 - m0 * xB_0
     b1 = yB_1 - m1 * xB_1
 
@@ -43,8 +47,8 @@ def vectorized_ls_dist(df):
     Returns np.nan if there is no overlap in x between the two
     segments.    
     """
-    m0 = (df['fol_y0'] - df['tip_y0']) / (df['fol_x0'] - df['tip_x0'])
-    m1 = (df['fol_y1'] - df['tip_y1']) / (df['fol_x1'] - df['tip_x1'])
+    m0 = old_div((df['fol_y0'] - df['tip_y0']), (df['fol_x0'] - df['tip_x0']))
+    m1 = old_div((df['fol_y1'] - df['tip_y1']), (df['fol_x1'] - df['tip_x1']))
     b0 = df['fol_y0'] - m0 * df['fol_x0']
     b1 = df['fol_y1'] - m1 * df['fol_x1']
 
@@ -96,7 +100,7 @@ def score(jres, cres, curated_num2name):
 
 
     ## Print general statistics of each dataset
-    zobj = zip(['Test', 'Curated', 'Joint'], [jres, cres, ares])
+    zobj = list(zip(['Test', 'Curated', 'Joint'], [jres, cres, ares]))
     for setname, label_set in zobj:
         print("%s dataset:\n----" % setname)
         unique_labels = label_set['color_group'].value_counts().index.values
@@ -148,12 +152,12 @@ def score(jres, cres, curated_num2name):
     
 def parse_confusion_into_sensitivity_and_specificity(relabeled_confusion_matrix):
     ## Metrics
-    sensitivity = (relabeled_confusion_matrix.values.diagonal() / 
-        relabeled_confusion_matrix.sum(1))
+    sensitivity = (old_div(relabeled_confusion_matrix.values.diagonal(), 
+        relabeled_confusion_matrix.sum(1)))
 
     # This will fail if there are unused j_labels
-    specificity = (relabeled_confusion_matrix.values.diagonal() / 
-        relabeled_confusion_matrix.sum(0))
+    specificity = (old_div(relabeled_confusion_matrix.values.diagonal(), 
+        relabeled_confusion_matrix.sum(0)))
     specificity.index = sensitivity.index
     metrics = pandas.concat([sensitivity, specificity], 
         axis=1, verify_integrity=True,

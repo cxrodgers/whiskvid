@@ -1,6 +1,8 @@
 """Handlers for summarized and colorized contacts"""
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from past.utils import old_div
 from .base import *
 import numpy as np
 import pandas
@@ -211,7 +213,7 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     # so only select the tacs for which we have entries in cwe
     if ctac.color.isnull().any():
         # This should no longer happen now that the above check is done
-        1/0
+        old_div(1,0)
         print("warning: dropping nan in ctac before colorizing cs")
         ctac = ctac.dropna()
 

@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from builtins import range
 import pandas
 import numpy as np
 from .base import calculate_center2center_distance_on_merged
@@ -33,11 +34,11 @@ def hungarian_assign(merged, dist):
     
     # Group by frame and extract the indexes into cost_array for each frame
     gobj = cost_by_frame.reset_index().groupby('frame0')
-    frame_idxs_l = gobj.groups.values()
+    frame_idxs_l = list(gobj.groups.values())
     
     # Check that the frames are sorted the same for each array
     unique_frames = np.sort(np.unique(frame0_array))
-    assert (unique_frames == gobj.groups.keys()).all()
+    assert (unique_frames == list(gobj.groups.keys())).all()
     assert (unique_frames == len_index0_by_frame.index.values).all()
     
     
@@ -158,7 +159,7 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian',
     idx1 = assignments['index1'].values
     
     # ilocify the indexes into streakass
-    ser = pandas.Series(range(len(mwe)), index=mwe.index)
+    ser = pandas.Series(list(range(len(mwe))), index=mwe.index)
     iidx0 = ser.loc[idx0].values
     iidx1 = ser.loc[idx1].values
 
@@ -188,7 +189,7 @@ def clump_segments_into_streaks(mwe, threshold=32.0, method='hungarian',
             break
 
     # Concatenate all chains    
-    chains = pandas.concat(rec_l, axis=0, keys=range(len(rec_l)), 
+    chains = pandas.concat(rec_l, axis=0, keys=list(range(len(rec_l))), 
         verify_integrity=True).swaplevel().sort_index()
     chains.index.names = ['start', 'link']
     chains.name = 'mwe_index'

@@ -1,3 +1,5 @@
+from builtins import map
+from builtins import str
 import numpy as np
 import whiskvid
 import pandas
@@ -9,7 +11,7 @@ def init_animation(data3, object2line, f, ax):
     whiskvid.plotting.set_axis_for_image(ax, 800, 800)
     
     # List of known objects
-    objects = map(int, list(data3.object.dropna().unique()))
+    objects = list(map(int, list(data3.object.dropna().unique())))
     
     # Sort them
     objects = sorted(objects)
@@ -36,7 +38,7 @@ def update_animation(data3, frame, object2line, f, ax, unclassified_lines):
     # unclassified_lines = []
     del unclassified_lines[:]
     
-    for line in object2line.values():
+    for line in list(object2line.values()):
         line.set_xdata([np.nan, np.nan])
     
     # get data and plot each object

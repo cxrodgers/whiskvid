@@ -42,6 +42,9 @@ Try to make each stage done by functions:
       first
 """
 from __future__ import print_function
+from __future__ import division
+from past.utils import old_div
+from builtins import object
 import os
 import shutil
 import glob
@@ -77,7 +80,7 @@ def remove_skipped(hits, skip_if_includes_l):
             res.append(s)
     return res
 
-class FileFinder:
+class FileFinder(object):
     """Parent class for each file in the session"""
     skip_if_includes_l = []
     always_skip_if_includes_l = ['.bak.']
@@ -557,7 +560,7 @@ def add_trials_to_tac(tac, v2b_fit, trial_matrix, drop_late_contacts=False):
     """
     # "vtime" is in the spurious 30fps timebase
     # the fits take this into account
-    tac['vtime'] = tac['frame'] / 30.
+    tac['vtime'] = old_div(tac['frame'], 30.)
     tac['btime'] = np.polyval(v2b_fit, tac['vtime'].values)
 
     # Add trial info to tac

@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from builtins import range
 import os
 import pandas
 from .base import *
@@ -197,7 +198,7 @@ class FrameMeanLuminances(CalculationHandlerWithoutDb):
         
         # DataFrame it
         lumsdf = pandas.Series(lums, 
-            index=pandas.Index(range(len(lums)), name='frame'),
+            index=pandas.Index(list(range(len(lums))), name='frame'),
             name='luminance')
         
         # Save

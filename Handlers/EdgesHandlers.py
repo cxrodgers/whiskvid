@@ -1,6 +1,11 @@
 """Module for handling edge detection and summarizing"""
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from builtins import zip
+from builtins import input
+from builtins import range
+from past.utils import old_div
 from .base import *
 import numpy as np
 import pandas
@@ -12,9 +17,9 @@ import MCwatch.behavior
 def get_int_input_with_default(name, value):
     """Get an integer input with a default value"""
     if value is None:
-        new_value_s = raw_input("Enter %s [default=None]:" % name)
+        new_value_s = input("Enter %s [default=None]:" % name)
     else:
-        new_value_s = raw_input("Enter %s [default=%d]:" % (name, value))
+        new_value_s = input("Enter %s [default=%d]:" % (name, value))
         
     try:
         new_value = int(new_value_s)
@@ -25,7 +30,7 @@ def get_int_input_with_default(name, value):
 
 def get_string_input_with_default(name, value):
     """Get an integer input with a default value"""
-    new_value_s = raw_input("Enter %s [default=%s]:" % (name, value))
+    new_value_s = input("Enter %s [default=%s]:" % (name, value))
     new_value = new_value_s.strip()
     
     if new_value == '':
@@ -785,7 +790,7 @@ def choose_crop_params_nodb(video_file, frametimes,
         # Plot result
         f = plot_effect_of_crop_params(frametimes, debug_res)
         
-        confirm_input = raw_input("Confirm? [y/N]:")
+        confirm_input = input("Confirm? [y/N]:")
         if confirm_input.lower().strip() == 'y':
             plt.close(f)
             break
@@ -903,8 +908,8 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
     col_edges = np.arange(0, v_width + 1, hist_pix_w, dtype=np.int)
     row_edges = np.arange(0, v_height + 1, hist_pix_h, dtype=np.int)
     
-    col_centers = (col_edges[:-1] + col_edges[1:]) / 2.0
-    row_centers = (row_edges[:-1] + row_edges[1:]) / 2.0
+    col_centers = old_div((col_edges[:-1] + col_edges[1:]), 2.0)
+    row_centers = old_div((row_edges[:-1] + row_edges[1:]), 2.0)
     
     # hist2d the edges for each group
     H_l = []

@@ -1,4 +1,7 @@
 from __future__ import print_function
+from builtins import input
+from builtins import str
+from builtins import map
 import matplotlib.pyplot as plt
 import pandas
 import numpy as np
@@ -229,7 +232,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
     else:
         # Session, keystone and whiskers names
         curated_string = ";".join(['='.join(map(str, nn)) 
-            for nn in curated_num2name.iteritems()])
+            for nn in curated_num2name.items()])
         axa[0].set_title('%s %d %s' % (
             vs.name, keystone_frame, curated_string),
             size='small',
@@ -274,7 +277,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
 
         # Determine if everything has been confirmed
         all_confirmed = np.all(np.in1d(key_frames, 
-            munged_frames + curated_results_d.keys()
+            munged_frames + list(curated_results_d.keys())
         ))
 
         # Determine if this frame is munged
@@ -317,7 +320,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
 
         
         ## Get answer
-        choice = raw_input("[c]onfirm / [f]orward / [b]ack / "
+        choice = input("[c]onfirm / [f]orward / [b]ack / "
             "[m]ung / un[M]ung / [q]uit / next [u]nconfirmed / [sXY]switch: ")
         
         # Parse
@@ -325,7 +328,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
 
         # Apply switchdict to frame_data['object'] using a temporary column
         frame_data['object2'] = frame_data['object'].copy()
-        for w0, w1 in switchdict.items():
+        for w0, w1 in list(switchdict.items()):
             print("switching %d to %d" % (w0, w1))
             frame_data.loc[frame_data['object'] == w0, 'object2'] = w1
         frame_data['object'] = frame_data['object2'].copy()
@@ -356,7 +359,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
         
             if result == 'next unconfirmed':
                 unconfirmed_frames_mask = ~np.in1d(key_frames, 
-                    munged_frames + curated_results_d.keys())
+                    munged_frames + list(curated_results_d.keys()))
 
                 if np.any(unconfirmed_frames_mask):
                     current_frame_idx = np.where(unconfirmed_frames_mask)[0][0]

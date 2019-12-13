@@ -1,5 +1,8 @@
 """Module for creating output videos with various overlays"""
 from __future__ import print_function
+from __future__ import division
+from builtins import zip
+from past.utils import old_div
 
 import pandas
 import os
@@ -310,8 +313,8 @@ def write_video_with_overlays_from_data(output_filename,
         # Create a figure with an image that fills it
         # We want the figsize to be in inches, so divide by dpi
         # And we want one invisible axis containing an image that fills the whole figure
-        figsize = input_width / float(dpi), input_height / float(dpi)
-        f = plt.figure(frameon=False, dpi=dpi/d_spatial, figsize=figsize)
+        figsize = old_div(input_width, float(dpi)), old_div(input_height, float(dpi))
+        f = plt.figure(frameon=False, dpi=old_div(dpi,d_spatial), figsize=figsize)
         ax = f.add_axes([0, 0, 1, 1])
         ax.axis('off')
     
@@ -319,8 +322,8 @@ def write_video_with_overlays_from_data(output_filename,
         # and height. If not, probably rounding error above
         canvas_width, canvas_height = f.canvas.get_width_height()
         if \
-            input_width / d_spatial != canvas_width or \
-            input_height / d_spatial != canvas_height:
+            old_div(input_width, d_spatial) != canvas_width or \
+            old_div(input_height, d_spatial) != canvas_height:
             raise ValueError("canvas size is not the same as input size")        
     else:
         assert f is not None

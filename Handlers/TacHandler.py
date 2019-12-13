@@ -1,6 +1,8 @@
 """Handles the calculating of touches and contacts"""
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
+from past.utils import old_div
 from .base import *
 import numpy as np
 import pandas
@@ -128,7 +130,7 @@ class TacHandler(CalculationHandler):
 
             # "vtime" is in the spurious 30fps timebase
             # the fits take this into account
-            tac['vtime'] = tac['frame'] / 30.
+            tac['vtime'] = old_div(tac['frame'], 30.)
             tac['btime'] = np.polyval(v2b_fit, tac['vtime'].values)
         
         # Optionally add trial labels
