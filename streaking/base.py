@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import pandas
 import numpy as np
@@ -97,13 +98,13 @@ def score(jres, cres, curated_num2name):
     ## Print general statistics of each dataset
     zobj = zip(['Test', 'Curated', 'Joint'], [jres, cres, ares])
     for setname, label_set in zobj:
-        print "%s dataset:\n----" % setname
+        print("%s dataset:\n----" % setname)
         unique_labels = label_set['color_group'].value_counts().index.values
-        print "%d groups: %s (in order of prevalence)" % (
-            len(unique_labels), ','.join(map(str, unique_labels)))
-        print "%d rows, of which %d unlabeled (-1)" % (
-            len(label_set), np.sum(label_set['color_group'] == -1))
-        print
+        print("%d groups: %s (in order of prevalence)" % (
+            len(unique_labels), ','.join(map(str, unique_labels))))
+        print("%d rows, of which %d unlabeled (-1)" % (
+            len(label_set), np.sum(label_set['color_group'] == -1)))
+        print()
 
 
     ## Figure out the mapping between j_labels and c_labels
@@ -128,19 +129,19 @@ def score(jres, cres, curated_num2name):
     confusion_matrix = confusion_matrix.loc[:, new_column_order]
 
     # Print results
-    print "Assignments (C>J):\n%s" % ('\n'.join([
+    print("Assignments (C>J):\n%s" % ('\n'.join([
         '%s (%s) > %s' % (c_label, curated_num2name[c_label], j_label) 
-        for c_label, j_label in zip(c_labels, j_labels)]))
-    print "Unassigned labels: %s" % (' '.join(map(str, unused_j_labels)))
-    print
+        for c_label, j_label in zip(c_labels, j_labels)])))
+    print("Unassigned labels: %s" % (' '.join(map(str, unused_j_labels))))
+    print()
 
 
     ## Calculate performance
-    print "Confusion matrix: "
+    print("Confusion matrix: ")
     relabeled_confusion_matrix = confusion_matrix.join(curated_num2name).set_index(
         'whisker')
-    print relabeled_confusion_matrix
-    print
+    print(relabeled_confusion_matrix)
+    print()
 
     return relabeled_confusion_matrix
     
@@ -157,7 +158,7 @@ def parse_confusion_into_sensitivity_and_specificity(relabeled_confusion_matrix)
     metrics = pandas.concat([sensitivity, specificity], 
         axis=1, verify_integrity=True,
         keys=['sensitivity', 'specificity'])
-    print metrics
+    print(metrics)
     
     return metrics
     

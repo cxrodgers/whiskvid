@@ -1,9 +1,10 @@
+from __future__ import absolute_import
 import itertools
 import numpy as np
 import pandas
 import scipy.special
 import scipy.stats
-import base
+from . import base
 
 def update_relationships2(mwe, drop_same=False, drop_nan=True, key='object'):
     """Within each frame, merge on key and apply vectorized_ls_dist

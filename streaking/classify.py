@@ -1,10 +1,12 @@
+from __future__ import print_function
+from __future__ import absolute_import
 import numpy as np
 import pandas
-import clumping
-import geometry
-import interwhisker
+from . import clumping
+from . import geometry
+from . import interwhisker
 import itertools
-import animation
+from . import animation
 import scipy.optimize
 import datetime
 
@@ -39,12 +41,12 @@ def define_alignments(next_frame_streaks, streak2object_ser, verbose=True):
         if obj not in pre_assigned_streaks.values]
     
     if verbose:
-        print "info: need to assign %r to %r" % (
-            streaks_to_assign, available_objects)
-        print "info: %r already assigned to %r" % (
+        print("info: need to assign %r to %r" % (
+            streaks_to_assign, available_objects))
+        print("info: %r already assigned to %r" % (
             list(pre_assigned_streaks.index.values), 
             list(pre_assigned_streaks.values),
-        )
+        ))
 
     if len(streaks_to_assign) > len(available_objects):
         1/0
@@ -288,19 +290,19 @@ class Classifier(object):
     def clump(self):
         """Clump rows into streaks"""
         if self.verbosity >= 2:
-            print "clumping"
+            print("clumping")
         
         self.clumped_data = clumping.clump_segments_into_streaks(self.data)
         
         if self.verbosity >= 2:
-            print "done clumping"    
+            print("done clumping")    
     
     def update_geometry_model(self):
         """Set geometry_model and geometry_scaler from classified_data
         
         """
         if self.verbosity >= 2:
-            print "updating geometry"
+            print("updating geometry")
         
         # Add an angle column
         if 'frangle' not in self.classified_data.columns:
@@ -321,14 +323,14 @@ class Classifier(object):
         )
 
         if self.verbosity >= 2:
-            print "done updating geometry"
+            print("done updating geometry")
 
     def update_interwhisker_model(self):
         """Set self.interwhisker_distrs from self.classified_data
 
         """
         if self.verbosity >= 2:
-            print "updating interwhisker"
+            print("updating interwhisker")
         
         self.interwhisker_distrs = (
             interwhisker.update_relationships2(
@@ -337,7 +339,7 @@ class Classifier(object):
         )
         
         if self.verbosity >= 2:
-            print "done updating interwhisker"
+            print("done updating interwhisker")
     
     def setup_animation(self):
         """Set up animation handles"""
@@ -354,7 +356,7 @@ class Classifier(object):
     def update_animation(self):
         """Update animation if current frame >= self.animation_start_frame"""
         if self.verbosity >= 2:
-            print "updating animation"
+            print("updating animation")
             
         if self.current_frame >= self.animation_start_frame:
             animation.update_animation(
@@ -363,7 +365,7 @@ class Classifier(object):
             )
 
         if self.verbosity >= 2:
-            print "done updating animation"
+            print("done updating animation")
   
     def do_assignment(self, best_alignment):
         """Actually assign the best alignment
@@ -531,19 +533,19 @@ class Classifier(object):
                 next_frame = choose_next_frame(self.classified_data, 
                     self.current_frame)                
                 if self.verbosity >= 2:
-                    print "skipping frame,", self.current_frame
+                    print("skipping frame,", self.current_frame)
                 self.current_frame = next_frame
                 continue
             
             # Print status
             if self.verbosity >= 2:
-                print "goal: assign streaks %r to objects %r" % (
+                print("goal: assign streaks %r to objects %r" % (
                     streaks_and_objects['unassigned_streaks'],
                     streaks_and_objects['available_objects'],
-                )
-                print "info: streaks %r already assigned" % (
+                ))
+                print("info: streaks %r already assigned" % (
                     list(streaks_and_objects['assigned_streaks'].values),
-                )
+                ))
             
             
             ## Test all constraints
@@ -697,13 +699,13 @@ class Assigner(object):
     def announce_frame_status(self, streaks_and_objects):
         # Print status
         if self.verbosity >= 2:
-            print "goal: assign streaks %r to objects %r" % (
+            print("goal: assign streaks %r to objects %r" % (
                 streaks_and_objects['unassigned_streaks'],
                 streaks_and_objects['available_objects'],
-            )
-            print "info: streaks %r already assigned" % (
+            ))
+            print("info: streaks %r already assigned" % (
                 list(streaks_and_objects['assigned_streaks'].values),
-            )
+            ))
 
     def do_assignment(self, best_alignment):
         """Actually assign the best alignment
@@ -762,7 +764,7 @@ class Assigner(object):
         # Skip if no work
         if len(streaks_and_objects['unassigned_streaks']) == 0:
             if self.verbosity >= 2:
-                print "skipping frame,", self.current_frame
+                print("skipping frame,", self.current_frame)
             return
         
         # announce status
@@ -1053,10 +1055,10 @@ def repair_classifier(classifier, fold_heldout_results=None, verbosity=1,
         })
         if verbosity >= 1:
             if fold_heldout_results is not None:
-                print "%d/%d %f %f" % (len(repair_l), len(conflict_streaks), 
-                    error_rate, error_rate2)
+                print("%d/%d %f %f" % (len(repair_l), len(conflict_streaks), 
+                    error_rate, error_rate2))
             else:
-                print "%d/%d" % (len(repair_l), len(conflict_streaks))
+                print("%d/%d" % (len(repair_l), len(conflict_streaks)))
 
     
     ## Store back in classifier

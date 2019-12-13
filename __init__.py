@@ -21,6 +21,7 @@ a call to local_settings, which will set DATABASE_URL. So the database
 we connect to depends on the branch currently active in the 
 django project path.
 """
+from __future__ import absolute_import
 import os
 import sys
 import django
@@ -60,7 +61,7 @@ setup_django()
 
 # Now we can import the django modules
 import whisk_video
-import django_db
+from . import django_db
 
 
 # Import whiski files from where they live.
@@ -73,15 +74,15 @@ try:
 except ImportError:
     pass
 
-import db
+from . import db
 
 # Import the functions for analyzing data
-from base import *
+from .base import *
 
-import plotting
+from . import plotting
 
 
 try:
-    import output_video
+    from . import output_video
 except ImportError:
     pass

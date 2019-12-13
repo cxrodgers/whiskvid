@@ -1,3 +1,4 @@
+from __future__ import print_function
 import matplotlib.pyplot as plt
 import pandas
 import numpy as np
@@ -325,7 +326,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
         # Apply switchdict to frame_data['object'] using a temporary column
         frame_data['object2'] = frame_data['object'].copy()
         for w0, w1 in switchdict.items():
-            print "switching %d to %d" % (w0, w1)
+            print("switching %d to %d" % (w0, w1))
             frame_data.loc[frame_data['object'] == w0, 'object2'] = w1
         frame_data['object'] = frame_data['object2'].copy()
         frame_data = frame_data.drop('object2', axis=1)
@@ -345,7 +346,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
         
         # Store in dict if confirmed
         if confirm:
-            print "storing confirmed result"
+            print("storing confirmed result")
             curated_results_d[key_frame] = frame_data[[
                 'streak', 'object']].copy()
         
@@ -360,7 +361,7 @@ def interactive_curation(keystone_frame, keystone_info, key_frames,
                 if np.any(unconfirmed_frames_mask):
                     current_frame_idx = np.where(unconfirmed_frames_mask)[0][0]
                 else:
-                    print "no more unconfirmed"
+                    print("no more unconfirmed")
         
             if result == 'next':
                 current_frame_idx = np.mod(current_frame_idx + 1, 

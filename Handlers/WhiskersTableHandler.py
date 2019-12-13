@@ -1,7 +1,9 @@
 """Module for handling whiskers table"""
+from __future__ import print_function
+from __future__ import absolute_import
 import numpy as np
 import pandas
-from base import CalculationHandler
+from .base import CalculationHandler
 try:
     import tables
 except ImportError:
@@ -54,7 +56,7 @@ class WhiskersTableHandler(CalculationHandler):
             v2b_fit = self.video_session.fit_v2b
             
             if np.any(np.isnan(v2b_fit)):
-                print "warning: v2b_fit is null, cannot sync"
+                print("warning: v2b_fit is null, cannot sync")
             else:
                 # Apply sync
                 mwe['vtime'] = mwe['frame'] / 30.
@@ -116,13 +118,13 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
     ## Get the ends
     resdf = get_whisker_ends_hdf5(h5_filename, side=side)
     if verbose:
-        print "%d whisker rows to start" % len(resdf)
+        print("%d whisker rows to start" % len(resdf))
 
     
     ## Drop everything < thresh
     resdf = resdf[resdf['length'] >= length_thresh]
     if verbose:
-        print "%d rows after length mask" % len(resdf)
+        print("%d rows after length mask" % len(resdf))
 
     
     ## Follicle mask
@@ -130,7 +132,7 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         (resdf['fol_x'] > fol_range_x[0]) & (resdf['fol_x'] < fol_range_x[1]) &
         (resdf['fol_y'] > fol_range_y[0]) & (resdf['fol_y'] < fol_range_y[1])]
     if verbose:
-        print "%d rows after follicle mask" % len(resdf)    
+        print("%d rows after follicle mask" % len(resdf))    
 
 
     ## Add angle
@@ -169,7 +171,7 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         resdf = resdf.drop(horiz_l)
 
         if verbose:
-            print "%d rows after horizontal mask" % len(resdf)    
+            print("%d rows after horizontal mask" % len(resdf))    
 
 
     ## Exclude overlapping whiskers
@@ -204,7 +206,7 @@ def get_masked_whisker_ends_nodb(h5_filename, side,
         resdf = resdf.drop(potentially_overlapping['index1'].values)
 
         if verbose:
-            print "%d rows after overlapping mask" % len(resdf)    
+            print("%d rows after overlapping mask" % len(resdf))    
 
     return resdf
 

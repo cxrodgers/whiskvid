@@ -1,6 +1,7 @@
+from __future__ import absolute_import
 import pandas
 import numpy as np
-from base import calculate_center2center_distance_on_merged
+from .base import calculate_center2center_distance_on_merged
 import scipy.optimize
 
 def hungarian_assign(merged, dist):

@@ -1,10 +1,11 @@
 """Module for loading, processing, quantifying the tips of colorized whiskers.
 
 """
+from __future__ import absolute_import
 
 import pandas
 import numpy as np
-from base import CalculationHandler
+from .base import CalculationHandler
 import MCwatch.behavior
 
 class ColorizedWhiskerEndsHandler(CalculationHandler):

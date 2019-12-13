@@ -41,6 +41,7 @@ Try to make each stage done by functions:
       but it's unclear whether this should be done depth- or breadth-
       first
 """
+from __future__ import print_function
 import os
 import shutil
 import glob
@@ -282,7 +283,7 @@ def create_db_from_root_dir(root_dir=ROOT_DIR,
         assert root_dir == root_dir_check
         
         # Get files that match known endings
-        print "processing", session_dir
+        print("processing", session_dir)
         video_file = RawVideo.find(session_fulldir)
         whiskers_file = Whiskers.find(session_fulldir)
         edge_a_file = EdgesAll.find(session_fulldir)
@@ -360,7 +361,7 @@ def rescan_db():
             # Look for new bfile
             bfile = BehaviorLog.find(db.loc[session, 'session_dir'])
             if bfile is not None:
-                print "bfile found", bfile
+                print("bfile found", bfile)
                 db.loc[session, 'bfile'] = bfile
                 db_changed = True
 
@@ -385,7 +386,7 @@ def rescan_db():
             db_changed = True        
         
         if pandas.isnull(db.loc[session, 'date_s']):
-            print "setting date_s for %s to %s" % (session, session[:6])
+            print("setting date_s for %s to %s" % (session, session[:6]))
             db.loc[session, 'date_s'] = session[:6]
             db_changed = True
 
@@ -443,12 +444,12 @@ def create_session_directory_nodb(session, root_dir=ROOT_DIR, verbose=True):
     if os.path.exists(session_dir):
         raise ValueError("session dir already exists:", session_dir)
     if verbose:
-        print "creating", session_dir
+        print("creating", session_dir)
     os.mkdir(session_dir)
     
     # Copy the default.parameters into it
     if verbose:
-        print "copying params"
+        print("copying params")
     shutil.copyfile(
         os.path.join(root_dir, 'sensitive.parameters'),
         os.path.join(session_dir, 'default.parameters'))
@@ -478,7 +479,7 @@ def add_bfile_to_session_nodb(date_s, session_dir):
     bfile = find_closest_bfile(date_s)
     
     if bfile is None:
-        print "cannot find behavior file for session"
+        print("cannot find behavior file for session")
     else:
         bfile_splitname = os.path.split(bfile)[1]
         dst = os.path.join(session_dir, bfile_splitname)

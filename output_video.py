@@ -1,4 +1,5 @@
 """Module for creating output videos with various overlays"""
+from __future__ import print_function
 
 import pandas
 import os
@@ -179,7 +180,7 @@ def write_video_with_overlays(output_filename,
     # Load whiskers
     if whiskers_filename is not None:
         if verbose:
-            print "loading whiskers"
+            print("loading whiskers")
         # Need this to plot the whole whisker
         whiskers_file_handle = tables.open_file(whiskers_filename)
         
@@ -192,7 +193,7 @@ def write_video_with_overlays(output_filename,
     if contacts_table is None:
         if contacts_filename is not None:
             if verbose:
-                print "loading contacts"
+                print("loading contacts")
             contacts_table = pandas.read_pickle(contacts_filename)
         else:
             contacts_table = None
@@ -200,7 +201,7 @@ def write_video_with_overlays(output_filename,
     # Load edges
     if edges_filename is not None:
         if verbose:
-            print "loading edges"
+            print("loading edges")
         edge_a = np.load(edges_filename)
     else:
         edge_a = None
@@ -303,7 +304,7 @@ def write_video_with_overlays_from_data(output_filename,
 
     ## Set up the graphical handles
     if verbose:
-        print "setting up handles"
+        print("setting up handles")
 
     if ax is None:
         # Create a figure with an image that fills it
@@ -399,7 +400,7 @@ def write_video_with_overlays_from_data(output_filename,
         # Announce
         if ((announced_frame_trigger < len(frame_triggers)) and 
             (nframe > frame_triggers[announced_frame_trigger] + trigger_dstart)):
-            print "Reached trigger for frame", frame_triggers[announced_frame_trigger]
+            print("Reached trigger for frame", frame_triggers[announced_frame_trigger])
             announced_frame_trigger += 1
 
         # Update the trial text

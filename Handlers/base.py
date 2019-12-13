@@ -1,3 +1,4 @@
+from __future__ import print_function
 import pandas
 import os
 import datetime
@@ -207,7 +208,7 @@ class CalculationHandler(object):
                 
                 # Warn
                 if clobber_warn:
-                    print "warning: backing up %s" % backup_filename
+                    print("warning: backing up %s" % backup_filename)
                 
                 # Do the backup
                 shutil.copyfile(filename, backup_filename)
@@ -215,7 +216,7 @@ class CalculationHandler(object):
             elif clobber_action == 'clobber':
                 # Warn
                 if clobber_warn:
-                    print "warning: clobbering %s" % filename
+                    print("warning: clobbering %s" % filename)
             
             else:
                 raise ValueError("unknown clobber action: %s" % clobber_action)

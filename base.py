@@ -16,6 +16,7 @@
         Same as above but save to db
 * Plotting stuff, basically part of the pipeline
 """
+from __future__ import print_function
 try:
     from whisk.python import traj, trace
 except ImportError:
@@ -210,7 +211,7 @@ def put_whiskers_into_hdf5_nodb(whisk_filename, h5_filename, verbose=True,
     for idx in range(nwhisk):
         # Announce
         if verbose and np.mod(idx, 10000) == 0:
-            print idx
+            print(idx)
 
         # Get the C object and convert to python
         # I suspect this is the bottleneck in speed
@@ -293,7 +294,7 @@ def make_overlay_image(session, db=None, verbose=True, ax=None):
     # Load from cache if possible
     if os.path.exists(trialnum2frame_filename):
         if verbose:
-            print "loading cached trialnum2frame"
+            print("loading cached trialnum2frame")
         trialnum2frame = my.misc.pickle_load(trialnum2frame_filename)
     else:
         trialnum2frame = None
@@ -336,7 +337,7 @@ def make_overlay_image_nodb(trialnum2frame=None,
     # Get trialnum2frame
     if trialnum2frame is None:
         if verbose:
-            print "calculating trialnum2frame"
+            print("calculating trialnum2frame")
         trialnum2frame = MCwatch.behavior.overlays.extract_frames_at_retraction_times(
             behavior_filename=behavior_filename, 
             video_filename=video_filename, 
@@ -536,7 +537,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     for color, submwe in orig_mwe[orig_mwe.frame < 100000].groupby('color_group'):
         ax.plot(submwe.angle.values, submwe.fol_y.values, ',')    
     """
-    print "copying data"
+    print("copying data")
     # Make changes to the copy to avoid SettingWithCopyWarning
     mwe_copy = mwe.copy()
 
@@ -556,7 +557,7 @@ def classify_whiskers_by_follicle_order(mwe, max_whiskers=5,
     mwe_copy2 = mwe_copy2[mwe_copy2.frame.mod(subsample_frame) == 0]
 
     # Argsort each frame
-    print "sorting whiskers in order"
+    print("sorting whiskers in order")
     
     # No need to add 1 because rank starts with 1
     mwe_copy2['ordinal'] = mwe_copy2.groupby('frame')['fol_y'].apply(

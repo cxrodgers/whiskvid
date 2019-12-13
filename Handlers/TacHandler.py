@@ -1,5 +1,7 @@
 """Handles the calculating of touches and contacts"""
-from base import *
+from __future__ import print_function
+from __future__ import absolute_import
+from .base import *
 import numpy as np
 import pandas
 import my
@@ -70,7 +72,7 @@ class TacHandler(CalculationHandler):
         
         # Choose the follicle
         vfile = self.video_session.data.monitor_video.get_path
-        print "Enter the ROI coordinates of the follicle."
+        print("Enter the ROI coordinates of the follicle.")
         res = my.video.choose_rectangular_ROI(vfile, n_frames=n_frames, 
             interactive=interactive)
 
@@ -181,7 +183,7 @@ def calculate_contacts(mwe, edge_a, contact_dist_thresh=10, verbose=True):
             continue
 
         if verbose and np.mod(frame, 1000) == 0:
-            print frame
+            print(frame)
         
         for idx, frame_tip in frame_tips.iterrows():
             dists = np.sqrt(
@@ -308,12 +310,12 @@ def cluster_contacts_nodb(tac, max_contacts_per_frame=50, n_contig=3,
     n_contacts_per_frame = tac_gframe.apply(len)
     bad_frames = n_contacts_per_frame.index[
         n_contacts_per_frame > max_contacts_per_frame]
-    print "dropping %d bad frames" % len(bad_frames)
+    print("dropping %d bad frames" % len(bad_frames))
     tac = tac[~tac.frame.isin(bad_frames)]
     tac_gframe = tac.groupby('frame')
 
     # Cluster them
-    print "clustering"
+    print("clustering")
     tac_clustered = label_greedy(tac, n_contig=n_contig, x_contig=x_contig)
     
     return tac_clustered

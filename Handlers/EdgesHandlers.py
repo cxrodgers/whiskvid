@@ -1,5 +1,7 @@
 """Module for handling edge detection and summarizing"""
-from base import *
+from __future__ import print_function
+from __future__ import absolute_import
+from .base import *
 import numpy as np
 import pandas
 import scipy.ndimage
@@ -140,7 +142,7 @@ class AllEdgesHandler(CalculationHandler):
         try:
             vs_obj.param_face_side = side2int[manual_params['side']]
         except KeyError:
-            print "warning: invalid face side, leaving unchanged"
+            print("warning: invalid face side, leaving unchanged")
         vs_obj.param_edge_lumthresh = manual_params['edge_lumthresh']
         vs_obj.param_edge_x0 = manual_params['edge_roi_x0']        
         vs_obj.param_edge_x1 = manual_params['edge_roi_x1']        
@@ -925,7 +927,7 @@ def calculate_edge_summary_nodb(trial_matrix, edge_a, v_width, v_height,
 
         # Warn if missing edge_a entries
         if warn_on_missing_edges and n_bad_edges > 0:
-            print "warning: some edge_a entries are None at choice time"
+            print("warning: some edge_a entries are None at choice time")
         
         # Warn and continue if missing data for this set of keys
         if len(sub_edge_a) == 0:

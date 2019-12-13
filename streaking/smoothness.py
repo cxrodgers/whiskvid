@@ -1,6 +1,7 @@
+from __future__ import absolute_import
 import numpy as np
 import pandas
-import base
+from . import base
 
 
 def measure_smoothness_costs(mwe, next_frame_streaks, alignments, next_frame,

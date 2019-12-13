@@ -1,4 +1,6 @@
 """Module for interacting with django whisker video database."""
+from __future__ import print_function
+from __future__ import absolute_import
 
 import os
 #~ import shutil
@@ -8,7 +10,7 @@ import numpy as np
 import django
 import sys
 import whisk_video
-from Handlers import *
+from .Handlers import *
 import runner.models
 
 # For syncing
@@ -360,7 +362,7 @@ class VideoSession(object):
         try:
             self.data.lums.get_path
         except IOError:
-            print "calculating lums"
+            print("calculating lums")
             self.data.lums.calculate(verbose=verbose)
         
         # Load lums
@@ -383,7 +385,7 @@ class VideoSession(object):
         
         # Warning if no fit found
         if res is None:
-            print "warning: no fit found"
+            print("warning: no fit found")
             return
         
         

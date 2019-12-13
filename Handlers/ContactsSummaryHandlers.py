@@ -1,5 +1,7 @@
 """Handlers for summarized and colorized contacts"""
-from base import *
+from __future__ import print_function
+from __future__ import absolute_import
+from .base import *
 import numpy as np
 import pandas
 import whiskvid
@@ -144,7 +146,7 @@ class ColorizedContactsSummaryHandler(CalculationHandler):
             ) - 1          
             
             if (res['trial'] == -1).any():
-                print "warning: dropping contacts before first trial started"
+                print("warning: dropping contacts before first trial started")
                 res = res[res['trial'] != -1].copy()
 
             # Now add the actual trial number
@@ -183,7 +185,7 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     
     # For some reason ctac group is sometimes float
     if 'group' in ctac.select_dtypes([np.float]).columns:
-        print "warning: ctac group is float"
+        print("warning: ctac group is float")
         ctac['group'] = ctac['group'].astype(np.int)
     
         # Likely cs.index will also be float in this case
@@ -195,8 +197,8 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     # But why are there contacts from these whiskers anyway?
     ctac_not_in_cwe = ~ctac.index.isin(cwe.index)
     if ctac_not_in_cwe.sum() > 0:
-        print "warning: dropping %d/%d touches from ctac not in cwe" % (
-            ctac_not_in_cwe.sum(), len(ctac))
+        print("warning: dropping %d/%d touches from ctac not in cwe" % (
+            ctac_not_in_cwe.sum(), len(ctac)))
         ctac = ctac[~ctac_not_in_cwe].copy()
         
         # Also drop the corresponding rows in cs
@@ -210,7 +212,7 @@ def colorize_contacts_summary_nodb(ctac, cs, cwe):
     if ctac.color.isnull().any():
         # This should no longer happen now that the above check is done
         1/0
-        print "warning: dropping nan in ctac before colorizing cs"
+        print("warning: dropping nan in ctac before colorizing cs")
         ctac = ctac.dropna()
 
     # Group the ctac by 'group' (index into cs)

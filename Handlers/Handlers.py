@@ -1,11 +1,12 @@
+from __future__ import absolute_import
 import os
 import pandas
-from base import *
-from WhiskersTableHandler import WhiskersTableHandler
-from EdgesHandlers import AllEdgesHandler, EdgeSummaryHandler
-from ColorizedWhiskerEnds import ColorizedWhiskerEndsHandler
-from TacHandler import TacHandler, ClusteredTacHandler
-from ContactsSummaryHandlers import (
+from .base import *
+from .WhiskersTableHandler import WhiskersTableHandler
+from .EdgesHandlers import AllEdgesHandler, EdgeSummaryHandler
+from .ColorizedWhiskerEnds import ColorizedWhiskerEndsHandler
+from .TacHandler import TacHandler, ClusteredTacHandler
+from .ContactsSummaryHandlers import (
     ContactsSummaryHandler, ColorizedContactsSummaryHandler)
 
 # For making colorized video
