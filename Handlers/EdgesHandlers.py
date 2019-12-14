@@ -130,7 +130,7 @@ class AllEdgesHandler(CalculationHandler):
         
         # Set the crop stop
         if crop_stop is None:
-            crop_stop = (my.video.get_video_duration2(monitor_video_filename) 
+            crop_stop = (my.video.get_video_duration(monitor_video_filename) 
                 - 100.0)
         
         # Choose the params
