@@ -90,26 +90,78 @@ class AllEdgesHandler(CalculationHandler):
         except IOError:
             raise IOError("no all_edges found at %s" % filename)
         return data   
-    
-    def save_data(self, edge_a):
+
+    def save_data(self, data, clobber_action='backup', clobber_warn=True):
         """Save data to disk and set the database path.
         
-        This override uses numpy.save. See the base class for doc.
+        This is copied from CalculationHandler, except using np.save
+        instead of pickling.
+        
+        Saves data to the location specified in self.new_path. Then calls
+        self.set_path() to set the database field. Finally return
+        self.get_path, which should be the new full filename, and will
+        raise FileNotFoundError if something went wrong.
+        
+        This implementation uses pandas.to_pickle. Override if another
+        method is desired.
+        
+        
+        data : the data to save
+
+        clobber_action : string
+            This only matters if the file already exists.
+            If 'error' : raise exception
+            If 'backup' : backup the old file
+            If 'clobber' : overwrite the old file
+
+        clobber_warn : boolean
+            If False, silently performs clobber_action
+            If True, print warning before performing clobber_action
+        
+        
+        Returns: string, full path to written file
         """
         filename = self.new_path_full
         
+        # Determine if we are clobbering
+        if os.path.exists(filename):
+            if clobber_action == 'error':
+                raise IOError("file %s already exists" % filename)
+            
+            elif clobber_action == 'backup':
+                # Generate backup filename
+                now_string = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+                backup_filename = filename + '.%s.backup' % now_string
+                
+                # Warn
+                if clobber_warn:
+                    print("warning: backing up %s" % backup_filename)
+                
+                # Do the backup
+                shutil.copyfile(filename, backup_filename)
+                
+            elif clobber_action == 'clobber':
+                # Warn
+                if clobber_warn:
+                    print("warning: clobbering %s" % filename)
+            
+            else:
+                raise ValueError("unknown clobber action: %s" % clobber_action)
+        
         # Save
         try:
-            np.save(filename, edge_a)
+            np.save(filename, data)
+        except AttributeError:
+            raise ValueError("data cannot be saved")
         except IOError:
-            raise IOError("cannot numpy.save to %s" % filename)
+            raise IOError("cannot numpy.save at %s" % filename)
         
         # Set path
         self.set_path()
-    
+
         # This should now work
         return self.get_path
-    
+
     def choose_manual_params(self, force=False, crop_start=100.,
         crop_stop=None, crop_n_frames=25):
         """Interactively get the necessary manual params
