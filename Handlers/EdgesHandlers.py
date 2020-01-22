@@ -83,6 +83,10 @@ class AllEdgesHandler(CalculationHandler):
         filename = self.get_path
         try:
             data = np.load(filename, allow_pickle=True)
+        except UnicodeError:
+            # Python 2/3 problem
+            # https://stackoverflow.com/questions/38316283/trouble-using-numpy-load/38316603
+            data = np.load(filename, allow_pickle=True, encoding='latin1')
         except IOError:
             raise IOError("no all_edges found at %s" % filename)
         return data   
