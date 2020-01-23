@@ -163,8 +163,14 @@ class AllEdgesHandler(CalculationHandler):
         return self.get_path
 
     def choose_manual_params(self, force=False, crop_start=100.,
-        crop_stop=None, crop_n_frames=25):
+        crop_stop=None, crop_n_frames=25, frametimes=None):
         """Interactively get the necessary manual params
+        
+        crop_start, crop_stop, crop_n_frames : How to choose the frames
+            that are displayed during the cropping part, if `frametimes`
+            is None.
+        
+        frametimes : The frametimes to display during the cropping part.
         
         This is a two-stage process. First we simply plot a subset of the
         frames and request the edge ROI, lumthresh, and face side.
@@ -223,11 +229,14 @@ class AllEdgesHandler(CalculationHandler):
         if None in crop_params_init:
             crop_params_init = None
         
-        # Get the crop manual params
-        debug_frametimes = np.linspace(crop_start, crop_stop, crop_n_frames)
+        # Choose the frametimes if they aren't specified
+        if frametimes is None:
+            frametimes = np.linspace(crop_start, crop_stop, crop_n_frames)
+        
+        # Choose params
         crop_params = choose_crop_params_nodb(
             video_file=monitor_video_filename,
-            frametimes=debug_frametimes, 
+            frametimes=frametimes, 
             side=vs_obj.get_param_face_side_display(),
             edge_x0=vs_obj.param_edge_x0, edge_x1=vs_obj.param_edge_x1, 
             edge_y0=vs_obj.param_edge_y0, edge_y1=vs_obj.param_edge_y1, 
