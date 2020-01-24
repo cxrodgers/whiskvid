@@ -163,6 +163,10 @@ class WhiskerJoints(CalculationHandlerWithoutDb):
     """DataFrame of labeled joints"""
     _name = 'joints'
 
+class TrialMatrix(CalculationHandlerWithoutDb):
+    """DataFrame of trials with metadata about them"""
+    _name = 'trial_matrix'
+
 class FrameMeanLuminances(CalculationHandlerWithoutDb):
     """The mean luminance of each frame"""
     _name = 'lums'

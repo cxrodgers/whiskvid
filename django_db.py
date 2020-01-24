@@ -78,6 +78,7 @@ class VideoSession(object):
             CWE_with_kappa,
             FrameMeanLuminances,
             WhiskerJoints,
+            TrialMatrix,
             ]:
             # Init the handler
             handler = handler_class(self)
