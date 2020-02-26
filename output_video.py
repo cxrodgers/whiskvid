@@ -18,8 +18,8 @@ class OutOfFrames(BaseException):
 ## Frame updating function
 def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, joints, edge_a,
-    im2, edge_a_obj, contact_positions_l,
-    d_spatial, d_temporal, contact_colors,
+    im2, edge_a_obj, contacts_handle,
+    d_spatial, d_temporal, 
     whisker_lw=1, whisker_marker=None):
     """Helper function to plot each frame.
     
@@ -35,21 +35,9 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     contacts_table : contacts to plot
         if None, no contacts are plotted
     
-    contact_positions_l : if contacts are plotted, these handles are used
-    
-    contact_colors : array of color spec
-        The whiskers are colored by indexing into this array using the
-        `color_group` column in `whiskers_table`. Default is yellow if
-        that column does not exist. Note the color is explicitly used here
-        because each whisker gets a fresh handle.
-        
-        The contacts are implicitly colored by the handles in 
-        `contact_positions_l`. We determine which handle to use for each
-        contact by indexing into `contact_colors` using the
-        `color_group` column in `whiskers_table`. If that column doesn't
-        exist, the `group` column is modded with the length of this array.
-        If neither column exists, the first handle in `contact_positions_l`
-        is used for everything.
+    contacts_handle : handle or None
+        If not None, will update this graphics handle with the position
+        of the current contacts
     
     joints : DataFrame or None
         If not None, then these joints are plotted as the whiskers.
@@ -70,7 +58,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     # Get the frame
     im2.set_data(frame[::d_spatial, ::d_spatial])
     
-    # Get the edges
+    # Update the edge plotting object
     if edge_a is not None:
         edge_a_frame = edge_a[nframe]
         if edge_a_frame is not None:
@@ -80,7 +68,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             edge_a_obj.set_xdata([np.nan])
             edge_a_obj.set_ydata([np.nan])
     
-    # Get the contacts
+    # Update the contacts plotting object
     if contacts_table is not None:
         # Grab the contacts from frames (nframe - post_contact_linger, nframe]
         subtac = contacts_table[
@@ -88,24 +76,9 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             (contacts_table.frame > nframe - post_contact_linger)
             ]
         
-        # Split on group if it exists
-        if 'color_group' in subtac.columns:
-            # We've already decided how to color the contacts
-            for ncolor, contact_positions in enumerate(contact_positions_l):
-                subsubtac = subtac[subtac['color_group'] == ncolor]
-                contact_positions.set_xdata(subsubtac['tip_x'])
-                contact_positions.set_ydata(subsubtac['tip_y'])            
-        elif 'group' in subtac.columns:
-            # We've grouped the contacts but haven't decided how to
-            # color them yet
-            for ncolor, contact_positions in enumerate(contact_positions_l):
-                subsubtac = subtac[
-                    subtac['group'].mod(len(contact_positions_l)) == ncolor]
-                contact_positions.set_xdata(subsubtac['tip_x'])
-                contact_positions.set_ydata(subsubtac['tip_y'])
-        else:
-            contact_positions_l[0].set_xdata(subtac['tip_x'])
-            contact_positions_l[0].set_ydata(subtac['tip_y'])
+        # Use only the first contact_positions_l so they are colored the same
+        contacts_handle.set_xdata(subtac['tip_x'])
+        contacts_handle.set_ydata(subtac['tip_y'])
     
     # Get the whiskers for this frame
     if joints is not None:
@@ -222,12 +195,13 @@ def write_video_with_overlays_from_data(output_filename,
     dpi=50, output_fps=30,
     input_video_alpha=1,
     whiskers_table=None, whiskers_file_handle=None, joints=None,
-    edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
-    contacts_table=None, post_contact_linger=50,
+    edge_a=None, edge_alpha=1, typical_edges_hist2d=None, edge_lw=.5,
+    contacts_table=None, post_contact_linger=50, contact_ms=4,
     write_stderr_to_screen=True,
     input_frame_offset=0,
     get_extra_text=None,
-    contact_colors=None,
+    text_size=8,
+    contact_color='yellow',
     also_plot_traces=False, trace_data_x=None, trace_data_y=None,
     trace_data_kwargs=None,
     ffmpeg_writer_kwargs=None,
@@ -277,6 +251,7 @@ def write_video_with_overlays_from_data(output_filename,
     get_extra_text : if not None, should be a function that accepts a frame
         number and returns some text to add to the display. This is a 
         "real" frame number after accounting for any offset.
+    text_size : size of the text
     contact_colors : list of color specs to use
     func_update_figure : optional, function that takes the frame number
         as input and updates the figure
@@ -292,9 +267,6 @@ def write_video_with_overlays_from_data(output_filename,
     input_width = int(input_width)
     input_height = int(input_height)
 
-    if contact_colors is None:
-        contact_colors = my.plot.generate_colorbar(7)
-    
     if ffmpeg_writer_kwargs is None:
         ffmpeg_writer_kwargs = {}
 
@@ -341,25 +313,25 @@ def write_video_with_overlays_from_data(output_filename,
 
     # Plot contact positions dynamically
     if contacts_table is not None:
-        contact_positions_l = []
-        for color in contact_colors:
-            contact_positions_l.append(
-                ax.plot([np.nan], [np.nan], '.', ms=15, color=color)[0])
-        #~ contact_positions, = ax.plot([np.nan], [np.nan], 'r.', ms=15)
+        contacts_handle, = ax.plot(
+            [np.nan], [np.nan], '.', ms=contact_ms, color=contact_color)
     else:
-        contact_positions_l = None
+        contacts_handle = None
 
     # Dynamic edge
     if edge_a is not None:
-        edge_a_obj, = ax.plot([np.nan], [np.nan], '-', color='pink', lw=3)
+        edge_a_obj, = ax.plot([np.nan], [np.nan], '-', color='pink', lw=edge_lw)
     else:
         edge_a_obj = None
     
     # Text of trial
     if plot_trial_numbers:
-        txt = ax.text(0, ax.get_ylim()[0], 'waiting', 
-            size=20, ha='left', va='bottom', color='w')
-        trial_number = -1    
+        # Generate a handle to text
+        txt = ax.text(
+            .02, .02, 'waiting for text data',
+            transform=ax.transAxes, # relative to axis size
+            size=text_size, ha='left', va='bottom', color='w', 
+            )
     
     # This will hold whisker objects
     whisker_handles = []
@@ -402,20 +374,19 @@ def write_video_with_overlays_from_data(output_filename,
             announced_frame_trigger += 1
 
         # Update the trial text
-        if plot_trial_numbers:# and (nearest_choice_idx > trial_number):
+        if plot_trial_numbers:
             if get_extra_text is not None:
                 extra_text = get_extra_text(nframe)
             else:
                 extra_text = ''
             txt.set_text('frame %d trial %d %s' % (nframe, nearest_choice_idx, extra_text))
-            trial_number = nearest_choice_idx
 
         # Update the frame
         whisker_handles = frame_update(
             ax, nframe, frame, whisker_handles, contacts_table,
             post_contact_linger, joints, edge_a,
-            im2, edge_a_obj, contact_positions_l,
-            d_spatial, d_temporal, contact_colors, whisker_lw=whisker_lw,
+            im2, edge_a_obj, contacts_handle,
+            d_spatial, d_temporal, whisker_lw=whisker_lw,
             whisker_marker=whisker_marker)
         
         if func_update_figure is not None:
@@ -432,7 +403,7 @@ def write_video_with_overlays_from_data(output_filename,
     if not input_reader.isclosed():
         input_reader.close()
     writer.close()
-    plt.close(f)    
+    #~ plt.close(f)    
 
 def plot_stills_with_overlays_from_data(
     monitor_video_filename,
