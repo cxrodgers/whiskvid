@@ -17,10 +17,10 @@ class OutOfFrames(BaseException):
 
 ## Frame updating function
 def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
-    post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
+    post_contact_linger, joints, edge_a,
     im2, edge_a_obj, contact_positions_l,
     d_spatial, d_temporal, contact_colors,
-    truncate_edge_y=100, whisker_lw=1, whisker_marker=None):
+    whisker_lw=1, whisker_marker=None):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -51,8 +51,8 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
         If neither column exists, the first handle in `contact_positions_l`
         is used for everything.
     
-    whiskers_table, whiskers_file_handle : used to plot the whiskers
-        if either is None, no whiskers are plotted
+    joints : DataFrame or None
+        If not None, then these joints are plotted as the whiskers.
     
     whisker_handles : if whiskers are plotted, all of these handles
         are first deleted. The new whisker handles are stored in it.
@@ -64,22 +64,9 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     
     edge_a_obj : if an edge is plotted, this handle is used
     
-    truncate_edge_y : if Not None, drops everything with y < this value
-        in the edge. This is useful for when the shape edge connects
-        to the top of th frame
-    
     Returns: whisker_handles
         These are returned so that they can be deleted next time
     """
-    # figure out what the frame column is called
-    if whiskers_table is not None:
-        if 'frame' in whiskers_table.columns:
-            FRAME_LABEL = 'frame'
-        else:
-            FRAME_LABEL = 'time'
-        if FRAME_LABEL not in whiskers_table:
-            raise ValueError("cannot find the frame column in the whiskers table")
-    
     # Get the frame
     im2.set_data(frame[::d_spatial, ::d_spatial])
     
@@ -87,12 +74,8 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     if edge_a is not None:
         edge_a_frame = edge_a[nframe]
         if edge_a_frame is not None:
-            if truncate_edge_y is not None:
-                edge_a_obj.set_data(edge_a_frame[
-                    edge_a_frame[:, 0] >= truncate_edge_y].T[::-1])
-            else:
-                edge_a_obj.set_xdata(edge_a_frame[:, 1])
-                edge_a_obj.set_ydata(edge_a_frame[:, 0])
+            edge_a_obj.set_xdata(edge_a_frame[:, 1])
+            edge_a_obj.set_ydata(edge_a_frame[:, 0])
         else:
             edge_a_obj.set_xdata([np.nan])
             edge_a_obj.set_ydata([np.nan])
@@ -125,29 +108,33 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
             contact_positions_l[0].set_ydata(subtac['tip_y'])
     
     # Get the whiskers for this frame
-    if whiskers_table is not None and whiskers_file_handle is not None:
+    if joints is not None:
         # Remove old whiskers
         for handle in whisker_handles:
             handle.remove()
         whisker_handles = []            
         
-        sub_summary = whiskers_table[whiskers_table[FRAME_LABEL] == nframe]
-        for idx, row in sub_summary.iterrows():
+        # Select out whiskers from this frame
+        frame_joints = joints.loc[nframe]
+        
+        # Plot each
+        for whisker in frame_joints.index:
+            # Get the color of the whisker
             try:
-                color = whiskvid.GLOBAL_WHISKER2COLOR[row['whisker']]
+                color = whiskvid.GLOBAL_WHISKER2COLOR[whisker]
             except KeyError:
                 color = 'yellow'
 
+            # Plot the whisker
+            whisker_joints = frame_joints.loc[whisker].unstack().T
             line, = ax.plot(
-                whiskers_file_handle.root.pixels_x[idx],
-                whiskers_file_handle.root.pixels_y[idx],
+                whisker_joints['c'].values,
+                whisker_joints['r'].values,
                 color=color, lw=whisker_lw, marker=whisker_marker, 
                 mfc='none', ms=12)
+            
+            # Store the handle
             whisker_handles.append(line)
-            #~ line, = ax.plot([row['fol_x']], [row['fol_y']], 'gs')
-            #~ whisker_handles.append(line)
-            #~ line, = ax.plot([row['tip_x']], [row['tip_y']], 'rs')
-            #~ whisker_handles.append(line)
     
     return whisker_handles
 
@@ -234,7 +221,7 @@ def write_video_with_overlays_from_data(output_filename,
     d_temporal=5, d_spatial=1,
     dpi=50, output_fps=30,
     input_video_alpha=1,
-    whiskers_table=None, whiskers_file_handle=None, side='left',
+    whiskers_table=None, whiskers_file_handle=None, joints=None,
     edge_a=None, edge_alpha=1, typical_edges_hist2d=None, 
     contacts_table=None, post_contact_linger=50,
     write_stderr_to_screen=True,
@@ -246,7 +233,7 @@ def write_video_with_overlays_from_data(output_filename,
     ffmpeg_writer_kwargs=None,
     f=None, ax=None,
     func_update_figure=None,
-    whisker_lw=2, whisker_marker=None,
+    whisker_lw=1, whisker_marker=None,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -424,8 +411,9 @@ def write_video_with_overlays_from_data(output_filename,
             trial_number = nearest_choice_idx
 
         # Update the frame
-        whisker_handles = frame_update(ax, nframe, frame, whisker_handles, contacts_table,
-            post_contact_linger, whiskers_table, whiskers_file_handle, edge_a,
+        whisker_handles = frame_update(
+            ax, nframe, frame, whisker_handles, contacts_table,
+            post_contact_linger, joints, edge_a,
             im2, edge_a_obj, contact_positions_l,
             d_spatial, d_temporal, contact_colors, whisker_lw=whisker_lw,
             whisker_marker=whisker_marker)
