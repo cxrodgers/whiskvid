@@ -403,7 +403,7 @@ def write_video_with_overlays_from_data(output_filename,
     if not input_reader.isclosed():
         input_reader.close()
     writer.close()
-    #~ plt.close(f)    
+    plt.close(f)    
 
 def plot_stills_with_overlays_from_data(
     monitor_video_filename,
