@@ -205,7 +205,14 @@ def write_video_with_overlays(output_filename,
     if edges_filename is not None:
         if verbose:
             print("loading edges")
-        edge_a = np.load(edges_filename)
+        
+        try:
+            edge_a = np.load(edges_filename, allow_pickle=True)
+        except UnicodeError:
+            # Python 2/3 problem
+            # https://stackoverflow.com/questions/38316283/trouble-using-numpy-load/38316603
+            edge_a = np.load(edges_filename, allow_pickle=True, encoding='latin1')
+            
     else:
         edge_a = None
     
@@ -313,17 +320,18 @@ def write_video_with_overlays_from_data(output_filename,
         # Create a figure with an image that fills it
         # We want the figsize to be in inches, so divide by dpi
         # And we want one invisible axis containing an image that fills the whole figure
-        figsize = old_div(input_width, float(dpi)), old_div(input_height, float(dpi))
-        f = plt.figure(frameon=False, dpi=old_div(dpi,d_spatial), figsize=figsize)
+        figsize = (input_width / float(dpi), input_height / float(dpi))
+        f = plt.figure(frameon=False, dpi=(dpi / d_spatial), figsize=figsize)
         ax = f.add_axes([0, 0, 1, 1])
         ax.axis('off')
     
         # This return results in pixels, so should be the same as input width
         # and height. If not, probably rounding error above
         canvas_width, canvas_height = f.canvas.get_width_height()
-        if \
-            old_div(input_width, d_spatial) != canvas_width or \
-            old_div(input_height, d_spatial) != canvas_height:
+        if (
+            (input_width / d_spatial != canvas_width) or
+            (input_height / d_spatial != canvas_height)
+            ):
             raise ValueError("canvas size is not the same as input size")        
     else:
         assert f is not None
@@ -340,7 +348,8 @@ def write_video_with_overlays_from_data(output_filename,
     # Plot input video frames
     in_image = np.zeros((input_height, input_width))
     im2 = my.plot.imshow(in_image[::d_spatial, ::d_spatial], ax=ax, 
-        axis_call='image', cmap=plt.cm.gray, extent=(0, input_width, input_height, 0))
+        axis_call='image', cmap=plt.cm.gray, 
+        extent=(0, input_width, input_height, 0))
     im2.set_alpha(input_video_alpha)
     im2.set_clim((0, 255))
 
