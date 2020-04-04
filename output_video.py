@@ -88,26 +88,30 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
         whisker_handles = []            
         
         # Select out whiskers from this frame
-        frame_joints = joints.loc[nframe]
+        try:
+            frame_joints = joints.loc[nframe]
+        except KeyError:
+            frame_joints = None
         
-        # Plot each
-        for whisker in frame_joints.index:
-            # Get the color of the whisker
-            try:
-                color = whiskvid.GLOBAL_WHISKER2COLOR[whisker]
-            except KeyError:
-                color = 'yellow'
+        if frame_joints is not None:
+            # Plot each
+            for whisker in frame_joints.index:
+                # Get the color of the whisker
+                try:
+                    color = whiskvid.GLOBAL_WHISKER2COLOR[whisker]
+                except KeyError:
+                    color = 'yellow'
 
-            # Plot the whisker
-            whisker_joints = frame_joints.loc[whisker].unstack().T
-            line, = ax.plot(
-                whisker_joints['c'].values,
-                whisker_joints['r'].values,
-                color=color, lw=whisker_lw, marker=whisker_marker, 
-                mfc='none', ms=12)
-            
-            # Store the handle
-            whisker_handles.append(line)
+                # Plot the whisker
+                whisker_joints = frame_joints.loc[whisker].unstack().T
+                line, = ax.plot(
+                    whisker_joints['c'].values,
+                    whisker_joints['r'].values,
+                    color=color, lw=whisker_lw, marker=whisker_marker, 
+                    mfc='none', ms=12)
+                
+                # Store the handle
+                whisker_handles.append(line)
     
     return whisker_handles
 
