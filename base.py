@@ -823,16 +823,24 @@ def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
         Index is joint. It will always go from the beginning to the end
         of pixels_x and pixels_y, so reverse the order of them if you want.
     """
+    def drop_adjacent_duplicates(df):
+        """Drop any rows that are the same as the previous row"""
+        drop_mask = (df.diff() == 0).all(1)
+        if drop_mask.any():
+            df = df.loc[~drop_mask].copy()
+        
+        return df
+    
     # Intify the coordinates of every whisker
     coords = np.rint(np.asarray([pixels_y, pixels_x]).T
         ).astype(np.int)
     
     # DataFrame and drop duplicates
     cdf = pandas.DataFrame(coords, columns=('y', 'x'))
-    cdf = cdf.drop_duplicates()
+    cdf = drop_adjacent_duplicates(cdf)
     cdf.index = list(range(len(cdf)))
 
-    # Look for gaps": adjacent co-ordinates that differ by more
+    # Look for "gaps": adjacent co-ordinates that differ by more
     # than 1 in either X or Y
     is_gap = (cdf.diff().dropna().astype(np.int).abs() > 1).any(1)
     
@@ -867,7 +875,7 @@ def convert_whisker_to_joints(pixels_x, pixels_y, n_joints=8):
         assert not interpolated.isnull().any().any()
         
         # Round and drop duplicates
-        interpolated = interpolated.round().drop_duplicates()
+        interpolated = drop_adjacent_duplicates(interpolated.round())
         
         # Error-check that gap filling worked
         is_gap = (interpolated.diff().dropna().astype(
