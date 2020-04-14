@@ -211,7 +211,7 @@ class FrameMeanLuminances(CalculationHandlerWithoutDb):
         # Error check that we got the right number of frames
         # Do this after saving to ease debugging
         if stop_after_frame is None:
-            video_duration = my.video.get_video_duration2(video_file)
+            video_duration = my.video.get_video_duration(video_file)
             video_fps = my.video.get_video_params(video_file)[2]
             n_frames_in_video = int(np.rint(video_duration * video_fps))
             assert len(lums) == n_frames_in_video
