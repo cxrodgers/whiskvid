@@ -26,14 +26,12 @@ import my.video
 
 # Search in the following order for the session
 root_directory_search_list = [
-    '/mnt/fast/data/whisker/processed',
-    '/home/chris/whisker_video',
-    os.path.expanduser('~/mnt/nas2_home/whisker/processed'),
+    os.path.expanduser('~/mnt/nas2_home/20210503_pipeline_input/sessions'),
+    #~ os.path.expanduser('~/mnt/nas2_home/whisker/processed'),
 ]
+
 neural_root_directory_search_list = [
-    '/mnt/fast/data/neural',
-    '/home/chris/data',
-    os.path.expanduser('~/mnt/nas2_home/neural'),
+    #~ os.path.expanduser('~/mnt/nas2_home/neural'),
 ]
 
 class HandlerHolder(object):
