@@ -20,7 +20,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
     post_contact_linger, joints, edge_a,
     im2, edge_a_obj, contacts_handle,
     d_spatial, d_temporal, 
-    whisker_lw=1, whisker_marker=None):
+    whisker_lw=1, whisker_marker=None, whisker_marker_size=8):
     """Helper function to plot each frame.
     
     Typically this is called by write_video_with_overlays.
@@ -108,7 +108,7 @@ def frame_update(ax, nframe, frame, whisker_handles, contacts_table,
                     whisker_joints['c'].values,
                     whisker_joints['r'].values,
                     color=color, lw=whisker_lw, marker=whisker_marker, 
-                    mfc='none', ms=12)
+                    mfc='none', ms=whisker_marker_size)
                 
                 # Store the handle
                 whisker_handles.append(line)
@@ -212,6 +212,7 @@ def write_video_with_overlays_from_data(output_filename,
     f=None, ax=None,
     func_update_figure=None,
     whisker_lw=1, whisker_marker=None,
+    whisker_marker_size=8,
     ):
     """Creating a video overlaid with whiskers, contacts, etc.
     
@@ -383,7 +384,7 @@ def write_video_with_overlays_from_data(output_filename,
                 extra_text = get_extra_text(nframe)
             else:
                 extra_text = ''
-            txt.set_text('frame %d trial %d %s' % (nframe, nearest_choice_idx, extra_text))
+            txt.set_text('frame %d %s' % (nframe, extra_text))
 
         # Update the frame
         whisker_handles = frame_update(
@@ -391,7 +392,9 @@ def write_video_with_overlays_from_data(output_filename,
             post_contact_linger, joints, edge_a,
             im2, edge_a_obj, contacts_handle,
             d_spatial, d_temporal, whisker_lw=whisker_lw,
-            whisker_marker=whisker_marker)
+            whisker_marker=whisker_marker,
+            whisker_marker_size=whisker_marker_size,
+            )
         
         if func_update_figure is not None:
             func_update_figure(nframe)
