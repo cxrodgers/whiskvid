@@ -24,7 +24,12 @@ django project path.
 from __future__ import absolute_import
 import os
 import sys
-import django
+try:
+    import django
+    NO_DJANGO = False
+except ImportError:
+    NO_DJANGO = True
+    pass
 
 ## Load the interface with the django database
 def setup_django():
@@ -57,10 +62,12 @@ def setup_django():
     # Setup django
     django.setup()
 
-setup_django()
+if not NO_DJANGO:
+    setup_django()
 
-# Now we can import the django modules
-import whisk_video
+    # Now we can import the django modules
+    import whisk_video
+
 from . import django_db
 
 

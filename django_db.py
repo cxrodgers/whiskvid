@@ -11,11 +11,25 @@ import os
 import datetime
 import pandas
 import numpy as np
-import django
+try:
+    import django
+except ImportError:
+    pass
 import sys
-import whisk_video
+
+# This will not work without django
+try:
+    import whisk_video
+except ImportError:
+    pass
+
 from .Handlers import *
-import runner.models
+
+# This will not work without django
+try:
+    import runner.models
+except ImportError:
+    pass
 
 # For syncing
 import MCwatch.behavior
@@ -94,13 +108,22 @@ class VideoSession(object):
     @classmethod
     def from_name(self, name, forced_root_directory=None, **kwargs):
         """Query database for session name and initialize VideoSession"""
-        # Load django object
-        django_vsession = whisk_video.models.VideoSession.objects.filter(
-            name=name).first()
         
-        if django_vsession is None:
-            raise ValueError(
-                "cannot find django VideoSession with name %s" % name)
+        # Depends on whether we have django
+        if whiskvid.NO_DJANGO:
+            django_vsession = None
+            self.name = name
+        
+        else:
+            # Load django object
+            django_vsession = whisk_video.models.VideoSession.objects.filter(
+                name=name).first()
+            
+            if django_vsession is None:
+                raise ValueError(
+                    "cannot find django VideoSession with name %s" % name)
+            
+            self.name = self._django_object.name
         
         # Initialize object from that
         return VideoSession(django_vsession, 
@@ -152,10 +175,6 @@ class VideoSession(object):
     def frame_width(self):
         return self._django_object.frame_width
 
-    @property
-    def name(self):
-        return self._django_object.name
-    
     @property
     def frame_rate(self):
         return self._django_object.frame_rate
