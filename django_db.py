@@ -123,7 +123,7 @@ class VideoSession(object):
                 raise ValueError(
                     "cannot find django VideoSession with name %s" % name)
             
-            self.name = self._django_object.name
+            self.name = name
         
         # Initialize object from that
         return VideoSession(django_vsession, 
