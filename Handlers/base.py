@@ -5,6 +5,7 @@ import pandas
 import os
 import datetime
 import shutil
+import whiskvid
 
 class Error(Exception):
     """Base class for exceptions in this module"""
@@ -79,16 +80,22 @@ class CalculationHandler(object):
         
         Returns: full path to file
         """
-        # Get the filename from the db
-        short_filename = self._get_field()
+        # Without django, just assume new_path is correct
+        if whiskvid.NO_DJANGO:
+            short_filename = self.new_path
         
-        # Test if null
-        if short_filename is None or short_filename == '':
-            raise FieldNotSetError(self._db_field_path, str(self.video_session))
+        else:
+            # Get the filename from the db
+            short_filename = self._get_field()
+            
+            # Test if null
+            if short_filename is None or short_filename == '':
+                raise FieldNotSetError(self._db_field_path, str(self.video_session))
         
-        # Raise exception if file doesn't exist?
+        # Raise exception if file doesn't exist
         full_filename = os.path.join(self.video_session.session_path,
             short_filename)
+        
         if not os.path.exists(full_filename):
             raise FileDoesNotExistError(self._db_field_path, full_filename,
                 str(self.video_session))
