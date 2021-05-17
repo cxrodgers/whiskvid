@@ -15,7 +15,6 @@ import numpy as np
 import tables
 import whiskvid
 import MCwatch.behavior
-import WhiskiWrap
 
 # For lums
 import my.video
