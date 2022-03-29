@@ -40,7 +40,8 @@ import my.video
 
 # Search in the following order for the session
 root_directory_search_list = [
-    os.path.expanduser('~/mnt/nas2_home/20210503_pipeline_input/sessions'),
+    os.path.expanduser('~/mnt/cuttlefish/chris/farscape/chris/whisker/processed')
+    #~ os.path.expanduser('~/mnt/nas2_home/20210503_pipeline_input/sessions'),
     #~ os.path.expanduser('~/mnt/nas2_home/whisker/processed'),
 ]
 
